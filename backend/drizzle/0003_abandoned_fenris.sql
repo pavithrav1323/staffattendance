@@ -1,0 +1,1 @@
+ALTER TABLE "companies" ADD COLUMN "timezone" varchar(100) NOT NULL;
