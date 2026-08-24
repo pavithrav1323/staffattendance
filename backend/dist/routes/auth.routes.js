@@ -1,6 +1,6 @@
 import { Router, } from "express";
 import { authenticateToken, } from "../middleware/auth.middleware.js";
-import { changePassword, getMyProfile, getPublicDepartments, login, logout, refreshAccessToken, registerStaff, registerProgramOwner, } from "../modules/auth/auth.service.js";
+import { changePassword, getMyProfile, getPublicCompanies, getPublicDepartments, login, logout, refreshAccessToken, registerStaff, registerProgramOwner, } from "../modules/auth/auth.service.js";
 import { loginSchema, refreshSchema, registerSchema, registerProgramOwnerSchema, } from "../modules/auth/auth.schema.js";
 import { validateBody } from "../middleware/validate.middleware.js";
 import { AppError } from "../utils/app-error.js";
@@ -25,6 +25,18 @@ router.get("/departments", async (req, res, next) => {
             throw new AppError(400, "Company code is required");
         }
         const data = await getPublicDepartments(companyCode);
+        res.status(200).json({
+            success: true,
+            data,
+        });
+    }
+    catch (error) {
+        next(error);
+    }
+});
+router.get("/companies", async (req, res, next) => {
+    try {
+        const data = await getPublicCompanies();
         res.status(200).json({
             success: true,
             data,

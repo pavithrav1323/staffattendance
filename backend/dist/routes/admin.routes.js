@@ -43,6 +43,12 @@ router.get("/attendance", authenticateToken, allowRoles("ADMIN"), requireCompany
         const year = req.query.year
             ? String(req.query.year)
             : undefined;
+        const startDate = req.query.startDate
+            ? String(req.query.startDate)
+            : undefined;
+        const endDate = req.query.endDate
+            ? String(req.query.endDate)
+            : undefined;
         const employeeId = req.query.employeeId
             ? String(req.query.employeeId)
             : undefined;
@@ -52,7 +58,7 @@ router.get("/attendance", authenticateToken, allowRoles("ADMIN"), requireCompany
         const limit = req.query.limit
             ? Number(req.query.limit)
             : undefined;
-        const data = await getAdminAttendance(req.user, reportType, date, month, year, employeeId, page, limit);
+        const data = await getAdminAttendance(req.user, reportType, date, month, year, startDate, endDate, employeeId, page, limit);
         res.status(200).json({
             success: true,
             data,
@@ -79,10 +85,19 @@ router.get("/attendance/export", authenticateToken, allowRoles("ADMIN"), require
         const year = req.query.year
             ? String(req.query.year)
             : undefined;
+        const startDate = req.query.startDate
+            ? String(req.query.startDate)
+            : undefined;
+        const endDate = req.query.endDate
+            ? String(req.query.endDate)
+            : undefined;
         const employeeId = req.query.employeeId
             ? String(req.query.employeeId)
             : undefined;
-        const { csv, filename } = await getAdminAttendanceExport(req.user, reportType, date, month, year, employeeId);
+        const timezone = req.query.timezone
+            ? String(req.query.timezone)
+            : undefined;
+        const { csv, filename } = await getAdminAttendanceExport(req.user, reportType, date, month, year, startDate, endDate, employeeId, timezone);
         res.setHeader("Content-Type", "text/csv; charset=utf-8");
         res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
         return res.send(csv);
@@ -93,8 +108,9 @@ router.get("/attendance/export", authenticateToken, allowRoles("ADMIN"), require
 });
 /**
  * GET /api/admin/pending-staff
+ * Restricted to MASTER_ADMIN only
  */
-router.get("/pending-staff", ...adminAccess, async (req, res, next) => {
+router.get("/pending-staff", authenticateToken, allowRoles("MASTER_ADMIN"), requireCompanyContext, async (req, res, next) => {
     try {
         const data = await getPendingStaff(req.user);
         res.status(200).json({
@@ -108,8 +124,9 @@ router.get("/pending-staff", ...adminAccess, async (req, res, next) => {
 });
 /**
  * PATCH /api/admin/staff/:id/approve
+ * Restricted to MASTER_ADMIN only
  */
-router.patch("/staff/:id/approve", ...adminAccess, async (req, res, next) => {
+router.patch("/staff/:id/approve", authenticateToken, allowRoles("MASTER_ADMIN"), requireCompanyContext, async (req, res, next) => {
     try {
         const staffId = String(req.params.id);
         const data = await approveStaff(req.user, staffId);
@@ -125,8 +142,9 @@ router.patch("/staff/:id/approve", ...adminAccess, async (req, res, next) => {
 });
 /**
  * PATCH /api/admin/staff/:id/reject
+ * Restricted to MASTER_ADMIN only
  */
-router.patch("/staff/:id/reject", ...adminAccess, async (req, res, next) => {
+router.patch("/staff/:id/reject", authenticateToken, allowRoles("MASTER_ADMIN"), requireCompanyContext, async (req, res, next) => {
     try {
         const staffId = String(req.params.id);
         const data = await rejectStaff(req.user, staffId);

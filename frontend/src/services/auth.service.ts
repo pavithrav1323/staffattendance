@@ -115,6 +115,12 @@ interface PublicDepartment {
   code: string;
 }
 
+interface PublicCompany {
+  id: string;
+  companyCode: string;
+  companyName: string;
+}
+
 const getPublicDepartments = async (companyCode: string): Promise<PublicDepartment[]> => {
   const response = await apiRequest<PublicDepartment[]>(
     `/auth/departments?companyCode=${encodeURIComponent(companyCode)}`,
@@ -126,6 +132,19 @@ const getPublicDepartments = async (companyCode: string): Promise<PublicDepartme
   }
 
   throw new Error(response.message || 'Failed to load departments');
+};
+
+const getPublicCompanies = async (): Promise<PublicCompany[]> => {
+  const response = await apiRequest<PublicCompany[]>(
+    '/auth/companies',
+    'GET'
+  );
+
+  if (response.success && response.data) {
+    return response.data;
+  }
+
+  throw new Error(response.message || 'Failed to load companies');
 };
 
 interface RegisterStaffInput {
@@ -145,7 +164,7 @@ interface RegisterStaffData {
   name: string;
   email: string;
   status: string;
-  admin: { id: string; name: string } | null;
+  admin: { id: string; name: string; role?: string } | null;
 }
 
 const registerStaff = async (input: RegisterStaffInput): Promise<RegisterStaffData> => {
@@ -202,6 +221,7 @@ const getMyProfile = async (): Promise<Profile> => {
 export const authService = {
   login,
   getMyProfile,
+  getPublicCompanies,
   getPublicDepartments,
   registerStaff,
   refreshAccessToken,

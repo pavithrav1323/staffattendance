@@ -7,6 +7,7 @@ interface StaffRecord {
   email: string;
   phone: string | null;
   designation: string | null;
+  departmentId: string | null;
   status: string;
   createdAt: string;
 }
@@ -35,6 +36,7 @@ interface AttendanceRecord {
   clockInLongitude: string | null;
   clockInLocationName: string | null;
   clockInMethod: string | null;
+  assignedTask: string | null;
   clockOutTime: string | null;
   clockOutLatitude: string | null;
   clockOutLongitude: string | null;
@@ -111,6 +113,8 @@ export const adminService = {
     date?: string,
     month?: string,
     year?: string,
+    startDate?: string,
+    endDate?: string,
     employeeId?: string,
     page?: number,
     limit?: number
@@ -120,10 +124,12 @@ export const adminService = {
     if (date) params.append('date', date);
     if (month) params.append('month', month);
     if (year) params.append('year', year);
+    if (startDate) params.append('startDate', startDate);
+    if (endDate) params.append('endDate', endDate);
     if (employeeId) params.append('employeeId', employeeId);
     if (page) params.append('page', page.toString());
     if (limit) params.append('limit', limit.toString());
-    
+
     const queryString = params.toString();
     return apiRequest(`/admin/attendance${queryString ? `?${queryString}` : ''}`, 'GET');
   },
@@ -137,6 +143,8 @@ export const adminService = {
     date?: string,
     month?: string,
     year?: string,
+    startDate?: string,
+    endDate?: string,
     employeeId?: string
   ): Promise<Blob> => {
     const params = new URLSearchParams();
@@ -144,8 +152,12 @@ export const adminService = {
     if (date) params.append('date', date);
     if (month) params.append('month', month);
     if (year) params.append('year', year);
+    if (startDate) params.append('startDate', startDate);
+    if (endDate) params.append('endDate', endDate);
     if (employeeId) params.append('employeeId', employeeId);
-    
+    const browserTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (browserTimezone) params.append('timezone', browserTimezone);
+
     const queryString = params.toString();
     const token = localStorage.getItem('accessToken');
     

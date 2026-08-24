@@ -13,6 +13,7 @@ import {
 import {
   changePassword,
   getMyProfile,
+  getPublicCompanies,
   getPublicDepartments,
   login,
   logout,
@@ -71,6 +72,26 @@ router.get(
       }
 
       const data = await getPublicDepartments(companyCode);
+
+      res.status(200).json({
+        success: true,
+        data,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+router.get(
+  "/companies",
+  async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ) => {
+    try {
+      const data = await getPublicCompanies();
 
       res.status(200).json({
         success: true,

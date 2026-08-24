@@ -1,4 +1,4 @@
-import { pgTable, uuid, date, timestamp, numeric, integer, varchar, } from "drizzle-orm/pg-core";
+import { pgTable, uuid, date, timestamp, numeric, integer, varchar, text, } from "drizzle-orm/pg-core";
 import { companies } from "./companies.js";
 import { departments } from "./departments.js";
 import { workLocations } from "./work-locations.js";
@@ -40,6 +40,7 @@ export const attendance = pgTable("attendance", {
     clockInMethod: varchar("clock_in_method", {
         length: 20,
     }),
+    assignedTask: text("assigned_task"),
     clockOutTime: timestamp("clock_out_time", {
         withTimezone: true,
     }),

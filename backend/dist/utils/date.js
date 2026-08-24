@@ -10,6 +10,19 @@ export function getDateInTimeZone(timeZone) {
     const day = parts.find((part) => part.type === "day")?.value;
     return `${year}-${month}-${day}`;
 }
+export function formatTimeOnly(date, timeZone) {
+    if (!date)
+        return "--";
+    const options = {
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: true,
+    };
+    if (timeZone) {
+        options.timeZone = timeZone;
+    }
+    return new Intl.DateTimeFormat("en-US", options).format(date);
+}
 export function validateMonthFormat(month) {
     const regex = /^\d{4}-\d{2}$/;
     if (!regex.test(month)) {

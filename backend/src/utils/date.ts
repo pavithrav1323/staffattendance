@@ -23,6 +23,22 @@ export function getDateInTimeZone(
   return `${year}-${month}-${day}`;
 }
 
+export function formatTimeOnly(
+  date: Date | null | undefined,
+  timeZone?: string
+): string {
+  if (!date) return "--";
+  const options: Intl.DateTimeFormatOptions = {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+  };
+  if (timeZone) {
+    options.timeZone = timeZone;
+  }
+  return new Intl.DateTimeFormat("en-US", options).format(date);
+}
+
 export function validateMonthFormat(
   month: string
 ): boolean {

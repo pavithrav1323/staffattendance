@@ -14,7 +14,7 @@ interface StaffRecord {
 }
 
 interface AdminStaffListProps {
-  refreshKey: number;
+  refreshKey?: number;
 }
 
 const AdminStaffList = ({ refreshKey }: AdminStaffListProps) => {

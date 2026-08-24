@@ -151,7 +151,7 @@ export async function registerStaff(input: RegisterInput) {
       });
     }
 
-    const [responsibleAdmin] = await db
+    const [masterAdmin] = await db
       .select({
         id: users.id,
         name: users.name,
@@ -159,9 +159,8 @@ export async function registerStaff(input: RegisterInput) {
       .from(users)
       .where(
         and(
-          eq(users.role, "ADMIN"),
+          eq(users.role, "MASTER_ADMIN"),
           eq(users.companyId, company.id),
-          eq(users.departmentId, department.id),
           eq(users.status, "APPROVED")
         )
       )
@@ -169,8 +168,8 @@ export async function registerStaff(input: RegisterInput) {
 
     return {
       ...user,
-      admin: responsibleAdmin
-        ? { id: responsibleAdmin.id, name: responsibleAdmin.name }
+      admin: masterAdmin
+        ? { id: masterAdmin.id, name: masterAdmin.name, role: "master_admin" }
         : null,
     };
   } catch (error: any) {
@@ -242,10 +241,9 @@ export async function login(input: LoginInput) {
     if (
       user.role === "STAFF" &&
       (user.status === "PENDING" || user.status === "REJECTED") &&
-      user.companyId &&
-      user.departmentId
+      user.companyId
     ) {
-      const [responsibleAdmin] = await db
+      const [masterAdmin] = await db
         .select({
           id: users.id,
           name: users.name,
@@ -253,16 +251,15 @@ export async function login(input: LoginInput) {
         .from(users)
         .where(
           and(
-            eq(users.role, "ADMIN"),
+            eq(users.role, "MASTER_ADMIN"),
             eq(users.companyId, user.companyId),
-            eq(users.departmentId, user.departmentId),
             eq(users.status, "APPROVED")
           )
         )
         .limit(1);
 
-      const admin = responsibleAdmin
-        ? { id: responsibleAdmin.id, name: responsibleAdmin.name }
+      const approver = masterAdmin
+        ? { id: masterAdmin.id, name: masterAdmin.name, role: "master_admin" }
         : null;
 
       if (user.status === "PENDING") {
@@ -272,7 +269,7 @@ export async function login(input: LoginInput) {
           "STAFF_APPROVAL_PENDING",
           {
             status: user.status,
-            admin,
+            admin: approver,
           }
         );
       }
@@ -284,7 +281,7 @@ export async function login(input: LoginInput) {
           "STAFF_ACCOUNT_REJECTED",
           {
             status: user.status,
-            admin,
+            admin: approver,
           }
         );
       }
@@ -610,4 +607,15 @@ export async function getPublicDepartments(
         eq(departments.isActive, true)
       )
     );
+}
+
+export async function getPublicCompanies() {
+  return db
+    .select({
+      id: companies.id,
+      companyCode: companies.companyCode,
+      companyName: companies.companyName,
+    })
+    .from(companies)
+    .where(eq(companies.isActive, true));
 }

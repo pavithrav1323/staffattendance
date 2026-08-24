@@ -5,7 +5,7 @@ import { requireCompanyContext } from "../middleware/tenant.middleware.js";
 import { validateBody } from "../middleware/validate.middleware.js";
 import { createAdminSchema, createDepartmentSchema, } from "../modules/master-admin/master-admin.schema.js";
 import { activateAdmin, createAdmin, createDepartment, deactivateAdmin, deleteAdmin, deleteDepartment, getAdmins, getDepartments, getMasterAdminAttendance, getMasterAdminAttendanceExport, } from "../modules/master-admin/master-admin.service.js";
-import { getAdminAttendanceSummary } from "../modules/admin/admin.service.js";
+import { getAdminAttendanceSummary, getApprovedStaff, getPendingStaff, approveStaff, rejectStaff, } from "../modules/admin/admin.service.js";
 const router = Router();
 const masterAdminAccess = [
     authenticateToken,
@@ -143,8 +143,23 @@ router.patch("/admins/:id/deactivate", ...masterAdminAccess, async (req, res, ne
  */
 router.get("/attendance", ...masterAdminAccess, async (req, res, next) => {
     try {
+        const reportType = req.query.reportType
+            ? String(req.query.reportType)
+            : undefined;
+        const date = req.query.date
+            ? String(req.query.date)
+            : undefined;
         const month = req.query.month
             ? String(req.query.month)
+            : undefined;
+        const year = req.query.year
+            ? String(req.query.year)
+            : undefined;
+        const startDate = req.query.startDate
+            ? String(req.query.startDate)
+            : undefined;
+        const endDate = req.query.endDate
+            ? String(req.query.endDate)
             : undefined;
         const departmentId = req.query.departmentId
             ? String(req.query.departmentId)
@@ -158,7 +173,7 @@ router.get("/attendance", ...masterAdminAccess, async (req, res, next) => {
         const limit = req.query.limit
             ? Number(req.query.limit)
             : undefined;
-        const data = await getMasterAdminAttendance(req.user, month, departmentId, employeeId, page, limit);
+        const data = await getMasterAdminAttendance(req.user, reportType, date, month, year, startDate, endDate, departmentId, employeeId, page, limit);
         res.status(200).json({
             success: true,
             data,
@@ -173,8 +188,23 @@ router.get("/attendance", ...masterAdminAccess, async (req, res, next) => {
  */
 router.get("/attendance/export", ...masterAdminAccess, async (req, res, next) => {
     try {
+        const reportType = req.query.reportType
+            ? String(req.query.reportType)
+            : undefined;
+        const date = req.query.date
+            ? String(req.query.date)
+            : undefined;
         const month = req.query.month
             ? String(req.query.month)
+            : undefined;
+        const year = req.query.year
+            ? String(req.query.year)
+            : undefined;
+        const startDate = req.query.startDate
+            ? String(req.query.startDate)
+            : undefined;
+        const endDate = req.query.endDate
+            ? String(req.query.endDate)
             : undefined;
         const departmentId = req.query.departmentId
             ? String(req.query.departmentId)
@@ -182,7 +212,10 @@ router.get("/attendance/export", ...masterAdminAccess, async (req, res, next) =>
         const employeeId = req.query.employeeId
             ? String(req.query.employeeId)
             : undefined;
-        const { csv, filename } = await getMasterAdminAttendanceExport(req.user, month, departmentId, employeeId);
+        const timezone = req.query.timezone
+            ? String(req.query.timezone)
+            : undefined;
+        const { csv, filename } = await getMasterAdminAttendanceExport(req.user, reportType, date, month, year, startDate, endDate, departmentId, employeeId, timezone);
         res.setHeader("Content-Type", "text/csv; charset=utf-8");
         res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
         return res.send(csv);
@@ -199,6 +232,70 @@ router.get("/attendance/summary", ...masterAdminAccess, async (req, res, next) =
         const data = await getAdminAttendanceSummary(req.user);
         res.status(200).json({
             success: true,
+            data,
+        });
+    }
+    catch (error) {
+        next(error);
+    }
+});
+/**
+ * GET /api/master-admin/staff/pending
+ */
+router.get("/staff/pending", ...masterAdminAccess, async (req, res, next) => {
+    try {
+        const data = await getPendingStaff(req.user);
+        res.status(200).json({
+            success: true,
+            data,
+        });
+    }
+    catch (error) {
+        next(error);
+    }
+});
+/**
+ * GET /api/master-admin/staff/approved
+ */
+router.get("/staff/approved", ...masterAdminAccess, async (req, res, next) => {
+    try {
+        const data = await getApprovedStaff(req.user);
+        res.status(200).json({
+            success: true,
+            data,
+        });
+    }
+    catch (error) {
+        next(error);
+    }
+});
+/**
+ * PATCH /api/master-admin/staff/:id/approve
+ */
+router.patch("/staff/:id/approve", ...masterAdminAccess, async (req, res, next) => {
+    try {
+        const staffId = String(req.params.id);
+        const data = await approveStaff(req.user, staffId);
+        res.status(200).json({
+            success: true,
+            message: "Staff registration approved successfully.",
+            data,
+        });
+    }
+    catch (error) {
+        next(error);
+    }
+});
+/**
+ * PATCH /api/master-admin/staff/:id/reject
+ */
+router.patch("/staff/:id/reject", ...masterAdminAccess, async (req, res, next) => {
+    try {
+        const staffId = String(req.params.id);
+        const data = await rejectStaff(req.user, staffId);
+        res.status(200).json({
+            success: true,
+            message: "Staff registration rejected.",
             data,
         });
     }

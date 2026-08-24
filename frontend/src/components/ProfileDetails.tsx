@@ -26,7 +26,7 @@ const ProfileDetails = ({ profile }: ProfileDetailsProps) => {
     { label: 'Phone', value: profile.phone },
     { label: 'Role', value: profile.role },
     { label: 'Company Name', value: profile.companyName },
-    { label: 'Company ID / Company Code', value: profile.companyCode || profile.companyId },
+    { label: 'ILKKM ID / Company Code', value: profile.companyCode || profile.companyId },
     { label: 'Department', value: profile.departmentName },
     { label: 'Designation', value: profile.designation },
     { label: 'Status', value: profile.status },

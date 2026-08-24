@@ -1,6 +1,6 @@
 {
-  "name": "Staff Tracker Geo",
-  "short_name": "Staff Tracker",
+  "name": "Staff Attendance",
+  "short_name": "Staff Attendance",
   "description": "Staff attendance and location tracking",
   "start_url": "/",
   "scope": "/",

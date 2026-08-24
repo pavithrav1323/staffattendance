@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useNavigate, useLocation, Outlet } from 'react-router-dom';
 import { authService } from '../services/auth.service';
 
@@ -6,6 +6,13 @@ const StaffLayout = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  const currentUser = authService.getCurrentUser();
+  const displayRole = useMemo(() => {
+    const role = 'STAFF';
+    const deptName = currentUser?.departmentName;
+    return deptName ? `${role} - ${deptName}` : role;
+  }, [currentUser?.departmentName]);
 
   const handleLogout = async () => {
     try {
@@ -49,8 +56,8 @@ const StaffLayout = () => {
 
       <div className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
         <div className="sidebar-header">
-          <h2 className="app-name">Staff Tracker Geo</h2>
-          <p className="user-role">Staff</p>
+          <h2 className="app-name">Staff Attendance</h2>
+          <p className="user-role">{displayRole}</p>
         </div>
 
         <nav className="sidebar-nav">

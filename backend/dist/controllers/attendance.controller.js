@@ -3,14 +3,15 @@ import { db } from "../db/connection.js";
 import { attendance } from "../db/schema/attendance.js";
 import { companies } from "../db/schema/companies.js";
 import { users } from "../db/schema/users.js";
-import { getDateInTimeZone, getMonthBoundaries, validateMonthFormat, } from "../utils/date.js";
+import { getDateInTimeZone, getMonthBoundaries, getWeekBoundaries, getYearBoundaries, validateDateFormat, validateMonthFormat, validateYearFormat, formatTimeOnly, } from "../utils/date.js";
 import { reverseGeocode } from "../utils/geocoding.js";
+import { generateCSVRow } from "../utils/csv.js";
 /**
  * CLOCK IN
  */
 export const clockIn = async (req, res) => {
     try {
-        const { latitude, longitude, accuracy, method, } = req.body;
+        const { latitude, longitude, accuracy, method, assignedTask, } = req.body;
         const userId = req.user?.userId;
         if (!userId) {
             return res.status(401).json({
@@ -24,6 +25,19 @@ export const clockIn = async (req, res) => {
             return res.status(400).json({
                 success: false,
                 message: "Latitude, longitude, and accuracy are required",
+            });
+        }
+        const trimmedTask = (assignedTask || "").trim();
+        if (!trimmedTask) {
+            return res.status(400).json({
+                success: false,
+                message: "Assigned task is required.",
+            });
+        }
+        if (trimmedTask.length > 500) {
+            return res.status(400).json({
+                success: false,
+                message: "Assigned task must not exceed 500 characters.",
             });
         }
         const userResult = await db
@@ -79,6 +93,7 @@ export const clockIn = async (req, res) => {
             clockInLocationStatus: null,
             clockInLocationName: locationName.displayName,
             clockInMethod: method === "MANUAL" ? "MANUAL" : "BIOMETRIC",
+            assignedTask: trimmedTask,
             sessionStatus: "CLOCKED_IN",
             attendanceStatus: "PRESENT",
         };
@@ -269,6 +284,7 @@ export const getCurrentSession = async (req, res) => {
                 clockInDistanceMeters: activeAttendance[0]
                     .clockInDistanceMeters,
                 clockInMethod: activeAttendance[0].clockInMethod,
+                assignedTask: activeAttendance[0].assignedTask,
             },
         });
     }
@@ -299,41 +315,67 @@ export const getAttendanceHistory = async (req, res) => {
                 message: "Company context is required",
             });
         }
-        let month;
-        if (req.query.month) {
-            const monthParam = String(req.query.month);
-            if (!validateMonthFormat(monthParam)) {
-                return res.status(400).json({
-                    success: false,
-                    message: "Invalid month format. Use YYYY-MM",
-                });
-            }
-            month = monthParam;
+        const reportType = req.query.reportType
+            ? String(req.query.reportType)
+            : undefined;
+        const date = req.query.date
+            ? String(req.query.date)
+            : undefined;
+        const month = req.query.month
+            ? String(req.query.month)
+            : undefined;
+        const year = req.query.year
+            ? String(req.query.year)
+            : undefined;
+        const startDate = req.query.startDate
+            ? String(req.query.startDate)
+            : undefined;
+        const endDate = req.query.endDate
+            ? String(req.query.endDate)
+            : undefined;
+        const page = req.query.page
+            ? Number(req.query.page)
+            : undefined;
+        const limit = req.query.limit
+            ? Number(req.query.limit)
+            : undefined;
+        const currentPage = page ?? 1;
+        const currentLimit = limit ?? 20;
+        if (!Number.isInteger(currentPage) || currentPage < 1) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid page",
+            });
         }
-        else {
-            const [company] = await db
-                .select({
-                timezone: companies.timezone,
-            })
-                .from(companies)
-                .where(eq(companies.id, companyId))
-                .limit(1);
-            if (!company?.timezone) {
-                return res.status(500).json({
-                    success: false,
-                    message: "Company timezone not configured",
-                });
-            }
-            const currentDate = getDateInTimeZone(company.timezone);
-            month = currentDate.slice(0, 7);
+        if (!Number.isInteger(currentLimit) ||
+            currentLimit < 1 ||
+            currentLimit > 100) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid limit",
+            });
         }
-        const { start: monthStart, end: monthEnd } = getMonthBoundaries(month);
+        const rangeResult = await resolveStaffDateRange(companyId, reportType, date, month, year, startDate, endDate);
+        if (!rangeResult.ok) {
+            return res.status(400).json({
+                success: false,
+                message: rangeResult.message,
+            });
+        }
+        const { dateStart, dateEnd, reportLabel } = rangeResult;
         const conditions = [
             eq(attendance.employeeId, userId),
             eq(attendance.companyId, companyId),
-            gte(attendance.attendanceDate, monthStart),
-            lte(attendance.attendanceDate, monthEnd),
+            gte(attendance.attendanceDate, dateStart),
+            lte(attendance.attendanceDate, dateEnd),
         ];
+        const [totalCount] = await db
+            .select({ count: sql `count(*)` })
+            .from(attendance)
+            .where(and(...conditions));
+        const total = Number(totalCount?.count ?? 0);
+        const totalPages = Math.ceil(total / currentLimit);
+        const offset = (currentPage - 1) * currentLimit;
         const history = await db
             .select({
             id: attendance.id,
@@ -344,6 +386,7 @@ export const getAttendanceHistory = async (req, res) => {
             clockInLocationName: attendance.clockInLocationName,
             clockInLocationStatus: attendance.clockInLocationStatus,
             clockInMethod: attendance.clockInMethod,
+            assignedTask: attendance.assignedTask,
             clockOutTime: attendance.clockOutTime,
             clockOutLatitude: attendance.clockOutLatitude,
             clockOutLongitude: attendance.clockOutLongitude,
@@ -356,11 +399,17 @@ export const getAttendanceHistory = async (req, res) => {
         })
             .from(attendance)
             .where(and(...conditions))
-            .orderBy(desc(attendance.attendanceDate), desc(attendance.clockInTime));
+            .orderBy(desc(attendance.attendanceDate), desc(attendance.clockInTime))
+            .limit(currentLimit)
+            .offset(offset);
         return res.status(200).json({
             success: true,
             data: {
-                month,
+                period: reportLabel,
+                page: currentPage,
+                limit: currentLimit,
+                total,
+                totalPages,
                 records: history,
             },
         });
@@ -373,6 +422,225 @@ export const getAttendanceHistory = async (req, res) => {
         });
     }
 };
+/**
+ * STAFF ATTENDANCE HISTORY EXPORT (CSV)
+ */
+export const exportAttendanceHistory = async (req, res) => {
+    try {
+        const userId = req.user?.userId;
+        const companyId = req.user?.companyId;
+        if (!userId) {
+            return res.status(401).json({
+                success: false,
+                message: "Unauthorized: User ID not found",
+            });
+        }
+        if (!companyId) {
+            return res.status(403).json({
+                success: false,
+                message: "Company context is required",
+            });
+        }
+        const reportType = req.query.reportType
+            ? String(req.query.reportType)
+            : undefined;
+        const date = req.query.date
+            ? String(req.query.date)
+            : undefined;
+        const month = req.query.month
+            ? String(req.query.month)
+            : undefined;
+        const year = req.query.year
+            ? String(req.query.year)
+            : undefined;
+        const startDate = req.query.startDate
+            ? String(req.query.startDate)
+            : undefined;
+        const endDate = req.query.endDate
+            ? String(req.query.endDate)
+            : undefined;
+        const rangeResult = await resolveStaffDateRange(companyId, reportType, date, month, year, startDate, endDate);
+        if (!rangeResult.ok) {
+            return res.status(400).json({
+                success: false,
+                message: rangeResult.message,
+            });
+        }
+        const { dateStart, dateEnd, reportLabel } = rangeResult;
+        const conditions = [
+            eq(attendance.employeeId, userId),
+            eq(attendance.companyId, companyId),
+            gte(attendance.attendanceDate, dateStart),
+            lte(attendance.attendanceDate, dateEnd),
+        ];
+        const records = await db
+            .select({
+            attendanceDate: attendance.attendanceDate,
+            clockInTime: attendance.clockInTime,
+            clockInLatitude: attendance.clockInLatitude,
+            clockInLongitude: attendance.clockOutLongitude,
+            clockInLocationName: attendance.clockInLocationName,
+            clockInMethod: attendance.clockInMethod,
+            assignedTask: attendance.assignedTask,
+            clockOutTime: attendance.clockOutTime,
+            clockOutLatitude: attendance.clockOutLatitude,
+            clockOutLongitude: attendance.clockOutLongitude,
+            clockOutLocationName: attendance.clockOutLocationName,
+            clockOutMethod: attendance.clockOutMethod,
+            workingMinutes: attendance.workingMinutes,
+            attendanceStatus: attendance.attendanceStatus,
+            sessionStatus: attendance.sessionStatus,
+        })
+            .from(attendance)
+            .where(and(...conditions))
+            .orderBy(desc(attendance.attendanceDate), desc(attendance.clockInTime));
+        // Use browser timezone from query param, fall back to company timezone
+        const browserTimezone = req.query.timezone
+            ? String(req.query.timezone)
+            : undefined;
+        // Fetch company timezone as fallback
+        const [company] = await db
+            .select({ timezone: companies.timezone })
+            .from(companies)
+            .where(eq(companies.id, companyId))
+            .limit(1);
+        const timezone = browserTimezone || company?.timezone;
+        const header = generateCSVRow([
+            "Attendance Date",
+            "Clock In Time",
+            "Assigned Task",
+            "Clock In Location Name",
+            "Clock In Map",
+            "Clock In Method",
+            "Clock Out Time",
+            "Clock Out Location Name",
+            "Clock Out Map",
+            "Clock Out Method",
+            "Working Minutes",
+            "Attendance Status",
+            "Session Status",
+        ]);
+        const getLocationUrl = (lat, lng) => {
+            if (!lat || !lng)
+                return "Not available";
+            return `https://www.google.com/maps?q=${lat},${lng}`;
+        };
+        const rows = records.map((record) => generateCSVRow([
+            record.attendanceDate,
+            formatTimeOnly(record.clockInTime, timezone),
+            record.assignedTask || "",
+            record.clockInLocationName || "Not available",
+            getLocationUrl(record.clockInLatitude, record.clockInLongitude),
+            record.clockInMethod || "Not recorded",
+            formatTimeOnly(record.clockOutTime, timezone),
+            record.clockOutLocationName || "Not available",
+            getLocationUrl(record.clockOutLatitude, record.clockOutLongitude),
+            record.clockOutMethod || "Not recorded",
+            record.workingMinutes?.toString(),
+            record.attendanceStatus,
+            record.sessionStatus,
+        ]));
+        const csv = [header, ...rows].join("\n");
+        const filename = `attendance-${reportType || "monthly"}-${reportLabel}.csv`;
+        res.setHeader("Content-Type", "text/csv; charset=utf-8");
+        res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+        return res.send(csv);
+    }
+    catch (error) {
+        console.error("Export attendance history error:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Internal server error",
+        });
+    }
+};
+/**
+ * Resolves a date range for the Staff attendance history based on the
+ * report type. Reuses the same boundary helpers as Admin/Master Admin.
+ */
+async function resolveStaffDateRange(companyId, reportType, date, month, year, startDate, endDate) {
+    if (reportType === "daily") {
+        if (!date) {
+            return { ok: false, message: "Date is required for daily report" };
+        }
+        if (!validateDateFormat(date)) {
+            return { ok: false, message: "Invalid date format. Use YYYY-MM-DD" };
+        }
+        return { ok: true, dateStart: date, dateEnd: date, reportLabel: date };
+    }
+    if (reportType === "weekly") {
+        if (!date) {
+            return { ok: false, message: "Date is required for weekly report" };
+        }
+        if (!validateDateFormat(date)) {
+            return { ok: false, message: "Invalid date format. Use YYYY-MM-DD" };
+        }
+        const { start, end } = getWeekBoundaries(date);
+        return { ok: true, dateStart: start, dateEnd: end, reportLabel: `${start}-to-${end}` };
+    }
+    if (reportType === "yearly") {
+        if (year) {
+            if (!validateYearFormat(year)) {
+                return { ok: false, message: "Invalid year format. Use YYYY" };
+            }
+            const { start, end } = getYearBoundaries(year);
+            return { ok: true, dateStart: start, dateEnd: end, reportLabel: year };
+        }
+        const currentYear = await getCurrentDatePartForCompany(companyId, "year");
+        const { start, end } = getYearBoundaries(currentYear);
+        return { ok: true, dateStart: start, dateEnd: end, reportLabel: currentYear };
+    }
+    if (reportType === "custom") {
+        if (!startDate) {
+            return { ok: false, message: "Start date is required for custom date range report" };
+        }
+        if (!endDate) {
+            return { ok: false, message: "End date is required for custom date range report" };
+        }
+        if (!validateDateFormat(startDate)) {
+            return { ok: false, message: "Invalid start date format. Use YYYY-MM-DD" };
+        }
+        if (!validateDateFormat(endDate)) {
+            return { ok: false, message: "Invalid end date format. Use YYYY-MM-DD" };
+        }
+        if (endDate < startDate) {
+            return { ok: false, message: "End date cannot be earlier than start date" };
+        }
+        return {
+            ok: true,
+            dateStart: startDate,
+            dateEnd: endDate,
+            reportLabel: `${startDate}-to-${endDate}`,
+        };
+    }
+    // Default: monthly (preserves existing behavior)
+    if (month) {
+        if (!validateMonthFormat(month)) {
+            return { ok: false, message: "Invalid month format. Use YYYY-MM" };
+        }
+        const { start, end } = getMonthBoundaries(month);
+        return { ok: true, dateStart: start, dateEnd: end, reportLabel: month };
+    }
+    const currentMonth = await getCurrentDatePartForCompany(companyId, "month");
+    const { start, end } = getMonthBoundaries(currentMonth);
+    return { ok: true, dateStart: start, dateEnd: end, reportLabel: currentMonth };
+}
+async function getCurrentDatePartForCompany(companyId, part) {
+    const [company] = await db
+        .select({ timezone: companies.timezone })
+        .from(companies)
+        .where(eq(companies.id, companyId))
+        .limit(1);
+    if (!company?.timezone) {
+        throw new Error("Company timezone not configured");
+    }
+    const currentDate = getDateInTimeZone(company.timezone);
+    if (part === "year")
+        return currentDate.slice(0, 4);
+    if (part === "month")
+        return currentDate.slice(0, 7);
+    return currentDate;
+}
 /**
  * ATTENDANCE SUMMARY
  */

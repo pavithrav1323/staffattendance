@@ -109,10 +109,10 @@ const ProgramOwnerMasterAdmins = () => {
       setPasswordError('');
     }
 
-    // Validate Company ID
+    // Validate ILKKM ID
     const trimmedCompanyCode = companyCode.trim();
     if (!trimmedCompanyCode) {
-      setCompanyCodeError('Company ID is required');
+      setCompanyCodeError('ILKKM ID is required');
       isValid = false;
     } else {
       setCompanyCodeError('');
@@ -394,7 +394,7 @@ const ProgramOwnerMasterAdmins = () => {
             </div>
 
             <div className="form-group">
-              <label htmlFor="companyCode">Company ID</label>
+              <label htmlFor="companyCode">ILKKM ID</label>
               <input
                 type="text"
                 id="companyCode"
@@ -438,7 +438,7 @@ const ProgramOwnerMasterAdmins = () => {
                   <th>Name</th>
                   <th>Email</th>
                   <th>Phone</th>
-                  <th>Company ID</th>
+                  <th>ILKKM ID</th>
                   <th>Status</th>
                   <th>Created At</th>
                   <th>Actions</th>

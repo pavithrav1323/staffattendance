@@ -31,7 +31,13 @@ import {
   getMasterAdminAttendanceExport,
 } from "../modules/master-admin/master-admin.service.js";
 
-import { getAdminAttendanceSummary } from "../modules/admin/admin.service.js";
+import {
+  getAdminAttendanceSummary,
+  getApprovedStaff,
+  getPendingStaff,
+  approveStaff,
+  rejectStaff,
+} from "../modules/admin/admin.service.js";
 
 const router = Router();
 
@@ -263,8 +269,28 @@ router.get(
     next: NextFunction
   ) => {
     try {
+      const reportType = req.query.reportType
+        ? String(req.query.reportType)
+        : undefined;
+
+      const date = req.query.date
+        ? String(req.query.date)
+        : undefined;
+
       const month = req.query.month
         ? String(req.query.month)
+        : undefined;
+
+      const year = req.query.year
+        ? String(req.query.year)
+        : undefined;
+
+      const startDate = req.query.startDate
+        ? String(req.query.startDate)
+        : undefined;
+
+      const endDate = req.query.endDate
+        ? String(req.query.endDate)
         : undefined;
 
       const departmentId = req.query.departmentId
@@ -285,7 +311,12 @@ router.get(
 
       const data = await getMasterAdminAttendance(
         req.user!,
+        reportType,
+        date,
         month,
+        year,
+        startDate,
+        endDate,
         departmentId,
         employeeId,
         page,
@@ -314,8 +345,28 @@ router.get(
     next: NextFunction
   ) => {
     try {
+      const reportType = req.query.reportType
+        ? String(req.query.reportType)
+        : undefined;
+
+      const date = req.query.date
+        ? String(req.query.date)
+        : undefined;
+
       const month = req.query.month
         ? String(req.query.month)
+        : undefined;
+
+      const year = req.query.year
+        ? String(req.query.year)
+        : undefined;
+
+      const startDate = req.query.startDate
+        ? String(req.query.startDate)
+        : undefined;
+
+      const endDate = req.query.endDate
+        ? String(req.query.endDate)
         : undefined;
 
       const departmentId = req.query.departmentId
@@ -326,11 +377,21 @@ router.get(
         ? String(req.query.employeeId)
         : undefined;
 
+      const timezone = req.query.timezone
+        ? String(req.query.timezone)
+        : undefined;
+
       const { csv, filename } = await getMasterAdminAttendanceExport(
         req.user!,
+        reportType,
+        date,
         month,
+        year,
+        startDate,
+        endDate,
         departmentId,
-        employeeId
+        employeeId,
+        timezone
       );
 
       res.setHeader("Content-Type", "text/csv; charset=utf-8");
@@ -364,6 +425,114 @@ router.get(
 
       res.status(200).json({
         success: true,
+        data,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * GET /api/master-admin/staff/pending
+ */
+router.get(
+  "/staff/pending",
+  ...masterAdminAccess,
+  async (
+    req: AuthRequest,
+    res: Response,
+    next: NextFunction
+  ) => {
+    try {
+      const data = await getPendingStaff(req.user!);
+
+      res.status(200).json({
+        success: true,
+        data,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * GET /api/master-admin/staff/approved
+ */
+router.get(
+  "/staff/approved",
+  ...masterAdminAccess,
+  async (
+    req: AuthRequest,
+    res: Response,
+    next: NextFunction
+  ) => {
+    try {
+      const data = await getApprovedStaff(req.user!);
+
+      res.status(200).json({
+        success: true,
+        data,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * PATCH /api/master-admin/staff/:id/approve
+ */
+router.patch(
+  "/staff/:id/approve",
+  ...masterAdminAccess,
+  async (
+    req: AuthRequest,
+    res: Response,
+    next: NextFunction
+  ) => {
+    try {
+      const staffId = String(req.params.id);
+
+      const data = await approveStaff(
+        req.user!,
+        staffId
+      );
+
+      res.status(200).json({
+        success: true,
+        message: "Staff registration approved successfully.",
+        data,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * PATCH /api/master-admin/staff/:id/reject
+ */
+router.patch(
+  "/staff/:id/reject",
+  ...masterAdminAccess,
+  async (
+    req: AuthRequest,
+    res: Response,
+    next: NextFunction
+  ) => {
+    try {
+      const staffId = String(req.params.id);
+
+      const data = await rejectStaff(
+        req.user!,
+        staffId
+      );
+
+      res.status(200).json({
+        success: true,
+        message: "Staff registration rejected.",
         data,
       });
     } catch (error) {

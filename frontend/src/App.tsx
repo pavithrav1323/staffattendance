@@ -19,6 +19,7 @@ import MasterAdminDashboard from './pages/MasterAdminDashboard';
 import MasterAdminAttendancePage from './pages/MasterAdminAttendancePage';
 import MasterAdminDepartmentsPage from './pages/MasterAdminDepartmentsPage';
 import MasterAdminAdminsPage from './pages/MasterAdminAdminsPage';
+import MasterAdminStaffPage from './pages/MasterAdminStaffPage';
 import ProgramOwnerLayout from './layouts/ProgramOwnerLayout';
 import ProgramOwnerDashboardPage from './pages/ProgramOwnerDashboardPage';
 import ProgramOwnerMasterAdminsPage from './pages/ProgramOwnerMasterAdminsPage';
@@ -94,6 +95,7 @@ function App() {
           <Route path="attendance" element={<MasterAdminAttendancePage />} />
           <Route path="departments" element={<MasterAdminDepartmentsPage />} />
           <Route path="admins" element={<MasterAdminAdminsPage />} />
+          <Route path="staff" element={<MasterAdminStaffPage />} />
         </Route>
         <Route
           path="/program-owner"

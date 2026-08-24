@@ -2,8 +2,11 @@
   /* Theme Colors */
   --page-bg: #F3F6FC;
   --card-bg: #FFFFFF;
-  --primary-blue: #2563EB;
-  --primary-blue-hover: #1D4ED8;
+  --primary-blue: #8E2A7B;
+  --primary-blue-hover: #742166;
+  --primary-blue-light: #F6EDF4;
+  --primary-blue-rgb: 142, 42, 123;
+  --primary-blue-hover-rgb: 116, 33, 102;
   --text-primary: #111827;
   --text-secondary: #64748B;
   --border-color: #E2E8F0;
