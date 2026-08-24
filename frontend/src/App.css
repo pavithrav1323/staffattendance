@@ -3375,6 +3375,65 @@
   }
 }
 
+/* Form Action Row (Create + Cancel buttons) */
+.form-action-row {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+.form-action-btn {
+  width: 200px;
+  min-height: 48px;
+  padding: 10px 16px;
+  font-size: 15px;
+  font-weight: 600;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.2s, border-color 0.2s;
+  box-sizing: border-box;
+}
+
+.form-action-btn.submit-button {
+  background: var(--primary-blue);
+  color: white;
+  border: 1px solid var(--primary-blue);
+}
+
+.form-action-btn.submit-button:hover:not(:disabled) {
+  background: var(--primary-blue-hover);
+}
+
+.form-action-btn.cancel-button {
+  background: transparent;
+  color: var(--primary-blue);
+  border: 1px solid var(--primary-blue);
+}
+
+.form-action-btn.cancel-button:hover:not(:disabled) {
+  background: rgba(var(--primary-blue-rgb), 0.08);
+}
+
+.form-action-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+@media (max-width: 480px) {
+  .form-action-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .form-action-btn {
+    width: 100%;
+  }
+}
+
 .master-admin-admins .phone-number-input {
   width: 100%;
   max-width: 100%;

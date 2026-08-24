@@ -295,15 +295,16 @@ const ProgramOwnerMasterAdmins = () => {
       )}
 
       <div className="page-content">
-        <div className="section-header">
-          <h3>Master Admins</h3>
-          <button
-            onClick={() => setShowForm(!showForm)}
-            className="submit-button"
-          >
-            {showForm ? 'Cancel' : '+ Add Master Admin'}
-          </button>
-        </div>
+        {!showForm && (
+          <div className="section-header">
+            <button
+              onClick={() => setShowForm(true)}
+              className="submit-button"
+            >
+              + Add Master Admin
+            </button>
+          </div>
+        )}
 
         {showForm && (
           <form onSubmit={handleSubmit} className="add-form">
@@ -421,9 +422,23 @@ const ProgramOwnerMasterAdmins = () => {
               {companyNameError && <div className="field-error">{companyNameError}</div>}
             </div>
 
-            <button type="submit" disabled={processing} className="submit-button">
-              {processing ? 'Creating...' : 'Create Master Admin'}
-            </button>
+            <div className="form-action-row">
+              <button
+                type="submit"
+                disabled={processing}
+                className="submit-button form-action-btn"
+              >
+                {processing ? 'Creating...' : 'Create Master Admin'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowForm(false)}
+                disabled={processing}
+                className="cancel-button form-action-btn"
+              >
+                Cancel
+              </button>
+            </div>
           </form>
         )}
 
