@@ -4,7 +4,7 @@ export const registerSchema = z.object({
     employeeId: z.string().trim().min(1),
     name: z.string().trim().min(2),
     email: z.string().trim().email(),
-    phone: z.string().trim().min(7).max(30).optional(),
+    phone: z.string().trim().min(7).max(30),
     password: z.string().min(8),
     departmentId: z.string().uuid(),
     designation: z.string().trim().max(100).optional(),

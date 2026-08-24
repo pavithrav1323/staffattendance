@@ -86,18 +86,18 @@ export async function registerStaff(input) {
                 status: "PENDING",
             });
         }
-        const [responsibleAdmin] = await db
+        const [masterAdmin] = await db
             .select({
             id: users.id,
             name: users.name,
         })
             .from(users)
-            .where(and(eq(users.role, "ADMIN"), eq(users.companyId, company.id), eq(users.departmentId, department.id), eq(users.status, "APPROVED")))
+            .where(and(eq(users.role, "MASTER_ADMIN"), eq(users.companyId, company.id), eq(users.status, "APPROVED")))
             .limit(1);
         return {
             ...user,
-            admin: responsibleAdmin
-                ? { id: responsibleAdmin.id, name: responsibleAdmin.name }
+            admin: masterAdmin
+                ? { id: masterAdmin.id, name: masterAdmin.name, role: "master_admin" }
                 : null,
         };
     }
@@ -151,29 +151,28 @@ export async function login(input) {
     if (user.status !== "APPROVED") {
         if (user.role === "STAFF" &&
             (user.status === "PENDING" || user.status === "REJECTED") &&
-            user.companyId &&
-            user.departmentId) {
-            const [responsibleAdmin] = await db
+            user.companyId) {
+            const [masterAdmin] = await db
                 .select({
                 id: users.id,
                 name: users.name,
             })
                 .from(users)
-                .where(and(eq(users.role, "ADMIN"), eq(users.companyId, user.companyId), eq(users.departmentId, user.departmentId), eq(users.status, "APPROVED")))
+                .where(and(eq(users.role, "MASTER_ADMIN"), eq(users.companyId, user.companyId), eq(users.status, "APPROVED")))
                 .limit(1);
-            const admin = responsibleAdmin
-                ? { id: responsibleAdmin.id, name: responsibleAdmin.name }
+            const approver = masterAdmin
+                ? { id: masterAdmin.id, name: masterAdmin.name, role: "master_admin" }
                 : null;
             if (user.status === "PENDING") {
                 throw new AppError(403, "Your account is pending approval.", "STAFF_APPROVAL_PENDING", {
                     status: user.status,
-                    admin,
+                    admin: approver,
                 });
             }
             if (user.status === "REJECTED") {
                 throw new AppError(403, "Your account has been rejected.", "STAFF_ACCOUNT_REJECTED", {
                     status: user.status,
-                    admin,
+                    admin: approver,
                 });
             }
         }
@@ -414,5 +413,15 @@ export async function getPublicDepartments(companyCode) {
     })
         .from(departments)
         .where(and(eq(departments.companyId, company.id), eq(departments.isActive, true)));
+}
+export async function getPublicCompanies() {
+    return db
+        .select({
+        id: companies.id,
+        companyCode: companies.companyCode,
+        companyName: companies.companyName,
+    })
+        .from(companies)
+        .where(eq(companies.isActive, true));
 }
 //# sourceMappingURL=auth.service.js.map

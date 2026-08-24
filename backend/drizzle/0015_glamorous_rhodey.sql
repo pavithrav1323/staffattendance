@@ -1,0 +1,1 @@
+ALTER TABLE "attendance" ADD COLUMN "assigned_task" text;

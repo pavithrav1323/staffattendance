@@ -2,50 +2,38 @@ import { and, desc, eq, gte, lte, sql } from "drizzle-orm";
 import { db } from "../../db/connection.js";
 import { attendance } from "../../db/schema/attendance.js";
 import { companies } from "../../db/schema/companies.js";
+import { departments } from "../../db/schema/departments.js";
 import { users } from "../../db/schema/users.js";
 import { staffDevices } from "../../db/schema/staff-devices.js";
 import { AppError } from "../../utils/app-error.js";
 import { hashPassword, validatePassword, } from "../../utils/password.js";
-import { getDateInTimeZone, getMonthBoundaries, validateMonthFormat, validateDateFormat, validateYearFormat, getWeekBoundaries, getYearBoundaries, } from "../../utils/date.js";
+import { getDateInTimeZone, getMonthBoundaries, validateMonthFormat, validateDateFormat, validateYearFormat, getWeekBoundaries, getYearBoundaries, formatTimeOnly, } from "../../utils/date.js";
 import { generateCSVRow } from "../../utils/csv.js";
 export async function getPendingStaff(authUser) {
     if (!authUser.companyId) {
         throw new AppError(403, "Company context is required");
     }
-    if (authUser.role === "ADMIN") {
-        if (!authUser.departmentId) {
-            throw new AppError(403, "Department context is required");
-        }
-        return db
-            .select({
-            id: users.id,
-            employeeId: users.employeeId,
-            name: users.name,
-            email: users.email,
-            phone: users.phone,
-            designation: users.designation,
-            departmentId: users.departmentId,
-            status: users.status,
-        })
-            .from(users)
-            .where(and(eq(users.companyId, authUser.companyId), eq(users.departmentId, authUser.departmentId), eq(users.role, "STAFF"), eq(users.status, "PENDING")));
+    // Restrict pending staff access to MASTER_ADMIN only
+    if (authUser.role !== "MASTER_ADMIN") {
+        throw new AppError(403, "Only Master Admin can view pending Staff registrations.");
     }
-    if (authUser.role === "MASTER_ADMIN") {
-        return db
-            .select({
-            id: users.id,
-            employeeId: users.employeeId,
-            name: users.name,
-            email: users.email,
-            phone: users.phone,
-            designation: users.designation,
-            departmentId: users.departmentId,
-            status: users.status,
-        })
-            .from(users)
-            .where(and(eq(users.companyId, authUser.companyId), eq(users.role, "STAFF"), eq(users.status, "PENDING")));
-    }
-    throw new AppError(403, "Access denied");
+    return db
+        .select({
+        id: users.id,
+        employeeId: users.employeeId,
+        name: users.name,
+        email: users.email,
+        phone: users.phone,
+        designation: users.designation,
+        departmentId: users.departmentId,
+        departmentName: departments.name,
+        departmentCode: departments.code,
+        status: users.status,
+        createdAt: users.createdAt,
+    })
+        .from(users)
+        .leftJoin(departments, eq(users.departmentId, departments.id))
+        .where(and(eq(users.companyId, authUser.companyId), eq(users.role, "STAFF"), eq(users.status, "PENDING")));
 }
 export async function getStaffList(authUser) {
     if (!authUser.companyId) {
@@ -67,7 +55,7 @@ export async function getStaffList(authUser) {
             status: users.status,
         })
             .from(users)
-            .where(and(eq(users.companyId, authUser.companyId), eq(users.departmentId, authUser.departmentId), eq(users.role, "STAFF")));
+            .where(and(eq(users.companyId, authUser.companyId), eq(users.departmentId, authUser.departmentId), eq(users.role, "STAFF"), eq(users.status, "APPROVED")));
     }
     if (authUser.role === "MASTER_ADMIN") {
         return db
@@ -86,7 +74,32 @@ export async function getStaffList(authUser) {
     }
     throw new AppError(403, "Access denied");
 }
-export async function getAdminAttendance(authUser, reportType, date, month, year, employeeId, page, limit) {
+export async function getApprovedStaff(authUser) {
+    if (!authUser.companyId) {
+        throw new AppError(403, "Company context is required");
+    }
+    if (authUser.role !== "MASTER_ADMIN") {
+        throw new AppError(403, "Only Master Admin can view approved staff list");
+    }
+    return db
+        .select({
+        id: users.id,
+        employeeId: users.employeeId,
+        name: users.name,
+        email: users.email,
+        phone: users.phone,
+        designation: users.designation,
+        departmentId: users.departmentId,
+        departmentName: departments.name,
+        departmentCode: departments.code,
+        status: users.status,
+        createdAt: users.createdAt,
+    })
+        .from(users)
+        .leftJoin(departments, eq(users.departmentId, departments.id))
+        .where(and(eq(users.companyId, authUser.companyId), eq(users.role, "STAFF"), eq(users.status, "APPROVED")));
+}
+export async function getAdminAttendance(authUser, reportType, date, month, year, startDate, endDate, employeeId, page, limit) {
     if (!authUser.companyId) {
         throw new AppError(403, "Company context is required");
     }
@@ -108,120 +121,7 @@ export async function getAdminAttendance(authUser, reportType, date, month, year
         throw new AppError(400, "Invalid limit");
     }
     // Determine date range based on report type
-    let dateStart;
-    let dateEnd;
-    let reportLabel;
-    if (reportType === "daily") {
-        if (!date) {
-            throw new AppError(400, "Date is required for daily report");
-        }
-        if (!validateDateFormat(date)) {
-            throw new AppError(400, "Invalid date format. Use YYYY-MM-DD");
-        }
-        dateStart = date;
-        dateEnd = date;
-        reportLabel = date;
-    }
-    else if (reportType === "weekly") {
-        if (!date) {
-            throw new AppError(400, "Date is required for weekly report");
-        }
-        if (!validateDateFormat(date)) {
-            throw new AppError(400, "Invalid date format. Use YYYY-MM-DD");
-        }
-        const boundaries = getWeekBoundaries(date);
-        dateStart = boundaries.start;
-        dateEnd = boundaries.end;
-        reportLabel = date;
-    }
-    else if (reportType === "monthly") {
-        if (month) {
-            if (!validateMonthFormat(month)) {
-                throw new AppError(400, "Invalid month format. Use YYYY-MM");
-            }
-            const boundaries = getMonthBoundaries(month);
-            dateStart = boundaries.start;
-            dateEnd = boundaries.end;
-            reportLabel = month;
-        }
-        else {
-            const [company] = await db
-                .select({
-                timezone: companies.timezone,
-            })
-                .from(companies)
-                .where(eq(companies.id, authUser.companyId))
-                .limit(1);
-            if (!company?.timezone) {
-                throw new AppError(500, "Company timezone not configured");
-            }
-            const currentDate = getDateInTimeZone(company.timezone);
-            const currentMonth = currentDate.slice(0, 7);
-            const boundaries = getMonthBoundaries(currentMonth);
-            dateStart = boundaries.start;
-            dateEnd = boundaries.end;
-            reportLabel = currentMonth;
-        }
-    }
-    else if (reportType === "yearly") {
-        if (year) {
-            if (!validateYearFormat(year)) {
-                throw new AppError(400, "Invalid year format. Use YYYY");
-            }
-            const boundaries = getYearBoundaries(year);
-            dateStart = boundaries.start;
-            dateEnd = boundaries.end;
-            reportLabel = year;
-        }
-        else {
-            const [company] = await db
-                .select({
-                timezone: companies.timezone,
-            })
-                .from(companies)
-                .where(eq(companies.id, authUser.companyId))
-                .limit(1);
-            if (!company?.timezone) {
-                throw new AppError(500, "Company timezone not configured");
-            }
-            const currentDate = getDateInTimeZone(company.timezone);
-            const currentYear = currentDate.slice(0, 4);
-            const boundaries = getYearBoundaries(currentYear);
-            dateStart = boundaries.start;
-            dateEnd = boundaries.end;
-            reportLabel = currentYear;
-        }
-    }
-    else {
-        // Default to monthly for backward compatibility
-        if (month) {
-            if (!validateMonthFormat(month)) {
-                throw new AppError(400, "Invalid month format. Use YYYY-MM");
-            }
-            const boundaries = getMonthBoundaries(month);
-            dateStart = boundaries.start;
-            dateEnd = boundaries.end;
-            reportLabel = month;
-        }
-        else {
-            const [company] = await db
-                .select({
-                timezone: companies.timezone,
-            })
-                .from(companies)
-                .where(eq(companies.id, authUser.companyId))
-                .limit(1);
-            if (!company?.timezone) {
-                throw new AppError(500, "Company timezone not configured");
-            }
-            const currentDate = getDateInTimeZone(company.timezone);
-            const currentMonth = currentDate.slice(0, 7);
-            const boundaries = getMonthBoundaries(currentMonth);
-            dateStart = boundaries.start;
-            dateEnd = boundaries.end;
-            reportLabel = currentMonth;
-        }
-    }
+    const { dateStart, dateEnd, reportLabel } = await resolveAdminDateRange(authUser, reportType, date, month, year, startDate, endDate);
     let employeeUuid;
     if (employeeId) {
         const [staff] = await db
@@ -267,6 +167,7 @@ export async function getAdminAttendance(authUser, reportType, date, month, year
         clockInLongitude: attendance.clockInLongitude,
         clockInLocationName: attendance.clockInLocationName,
         clockInMethod: attendance.clockInMethod,
+        assignedTask: attendance.assignedTask,
         clockOutTime: attendance.clockOutTime,
         clockOutLatitude: attendance.clockOutLatitude,
         clockOutLongitude: attendance.clockOutLongitude,
@@ -291,7 +192,7 @@ export async function getAdminAttendance(authUser, reportType, date, month, year
         records,
     };
 }
-export async function getAdminAttendanceExport(authUser, reportType, date, month, year, employeeId) {
+export async function getAdminAttendanceExport(authUser, reportType, date, month, year, startDate, endDate, employeeId, browserTimezone) {
     if (!authUser.companyId) {
         throw new AppError(403, "Company context is required");
     }
@@ -301,121 +202,15 @@ export async function getAdminAttendanceExport(authUser, reportType, date, month
     if (!authUser.departmentId) {
         throw new AppError(403, "Department context is required");
     }
+    // Use browser timezone from request, fall back to company timezone
+    const [company] = await db
+        .select({ timezone: companies.timezone })
+        .from(companies)
+        .where(eq(companies.id, authUser.companyId))
+        .limit(1);
+    const timezone = browserTimezone || company?.timezone;
     // Determine date range based on report type
-    let dateStart;
-    let dateEnd;
-    let reportLabel;
-    if (reportType === "daily") {
-        if (!date) {
-            throw new AppError(400, "Date is required for daily report");
-        }
-        if (!validateDateFormat(date)) {
-            throw new AppError(400, "Invalid date format. Use YYYY-MM-DD");
-        }
-        dateStart = date;
-        dateEnd = date;
-        reportLabel = date;
-    }
-    else if (reportType === "weekly") {
-        if (!date) {
-            throw new AppError(400, "Date is required for weekly report");
-        }
-        if (!validateDateFormat(date)) {
-            throw new AppError(400, "Invalid date format. Use YYYY-MM-DD");
-        }
-        const boundaries = getWeekBoundaries(date);
-        dateStart = boundaries.start;
-        dateEnd = boundaries.end;
-        reportLabel = date;
-    }
-    else if (reportType === "monthly") {
-        if (month) {
-            if (!validateMonthFormat(month)) {
-                throw new AppError(400, "Invalid month format. Use YYYY-MM");
-            }
-            const boundaries = getMonthBoundaries(month);
-            dateStart = boundaries.start;
-            dateEnd = boundaries.end;
-            reportLabel = month;
-        }
-        else {
-            const [company] = await db
-                .select({
-                timezone: companies.timezone,
-            })
-                .from(companies)
-                .where(eq(companies.id, authUser.companyId))
-                .limit(1);
-            if (!company?.timezone) {
-                throw new AppError(500, "Company timezone not configured");
-            }
-            const currentDate = getDateInTimeZone(company.timezone);
-            const currentMonth = currentDate.slice(0, 7);
-            const boundaries = getMonthBoundaries(currentMonth);
-            dateStart = boundaries.start;
-            dateEnd = boundaries.end;
-            reportLabel = currentMonth;
-        }
-    }
-    else if (reportType === "yearly") {
-        if (year) {
-            if (!validateYearFormat(year)) {
-                throw new AppError(400, "Invalid year format. Use YYYY");
-            }
-            const boundaries = getYearBoundaries(year);
-            dateStart = boundaries.start;
-            dateEnd = boundaries.end;
-            reportLabel = year;
-        }
-        else {
-            const [company] = await db
-                .select({
-                timezone: companies.timezone,
-            })
-                .from(companies)
-                .where(eq(companies.id, authUser.companyId))
-                .limit(1);
-            if (!company?.timezone) {
-                throw new AppError(500, "Company timezone not configured");
-            }
-            const currentDate = getDateInTimeZone(company.timezone);
-            const currentYear = currentDate.slice(0, 4);
-            const boundaries = getYearBoundaries(currentYear);
-            dateStart = boundaries.start;
-            dateEnd = boundaries.end;
-            reportLabel = currentYear;
-        }
-    }
-    else {
-        // Default to monthly for backward compatibility
-        if (month) {
-            if (!validateMonthFormat(month)) {
-                throw new AppError(400, "Invalid month format. Use YYYY-MM");
-            }
-            const boundaries = getMonthBoundaries(month);
-            dateStart = boundaries.start;
-            dateEnd = boundaries.end;
-            reportLabel = month;
-        }
-        else {
-            const [company] = await db
-                .select({
-                timezone: companies.timezone,
-            })
-                .from(companies)
-                .where(eq(companies.id, authUser.companyId))
-                .limit(1);
-            if (!company?.timezone) {
-                throw new AppError(500, "Company timezone not configured");
-            }
-            const currentDate = getDateInTimeZone(company.timezone);
-            const currentMonth = currentDate.slice(0, 7);
-            const boundaries = getMonthBoundaries(currentMonth);
-            dateStart = boundaries.start;
-            dateEnd = boundaries.end;
-            reportLabel = currentMonth;
-        }
-    }
+    const { dateStart, dateEnd, reportLabel } = await resolveAdminDateRange(authUser, reportType, date, month, year, startDate, endDate);
     let employeeUuid;
     if (employeeId) {
         const [staff] = await db
@@ -450,6 +245,7 @@ export async function getAdminAttendanceExport(authUser, reportType, date, month
         clockInLongitude: attendance.clockInLongitude,
         clockInLocationName: attendance.clockInLocationName,
         clockInMethod: attendance.clockInMethod,
+        assignedTask: attendance.assignedTask,
         clockOutTime: attendance.clockOutTime,
         clockOutLatitude: attendance.clockOutLatitude,
         clockOutLongitude: attendance.clockOutLongitude,
@@ -470,6 +266,7 @@ export async function getAdminAttendanceExport(authUser, reportType, date, month
         "Department ID",
         "Attendance Date",
         "Clock In Time",
+        "Assigned Task",
         "Clock In Location Name",
         "Clock In Map",
         "Clock In Method",
@@ -491,11 +288,12 @@ export async function getAdminAttendanceExport(authUser, reportType, date, month
         record.employeeName,
         record.departmentId,
         record.attendanceDate,
-        record.clockInTime?.toISOString(),
+        formatTimeOnly(record.clockInTime, timezone),
+        record.assignedTask || "",
         record.clockInLocationName || "Not available",
         getLocationUrl(record.clockInLatitude, record.clockInLongitude),
         record.clockInMethod || "Not recorded",
-        record.clockOutTime?.toISOString(),
+        formatTimeOnly(record.clockOutTime, timezone),
         record.clockOutLocationName || "Not available",
         getLocationUrl(record.clockOutLatitude, record.clockOutLongitude),
         record.clockOutMethod || "Not recorded",
@@ -509,6 +307,99 @@ export async function getAdminAttendanceExport(authUser, reportType, date, month
         csv,
         filename,
     };
+}
+/**
+ * Resolves the date range (start/end) and a human-readable label
+ * for an Admin attendance report based on the report type.
+ * Reuses the same boundary helpers as the Master Admin service.
+ */
+async function resolveAdminDateRange(authUser, reportType, date, month, year, startDate, endDate) {
+    if (!authUser.companyId) {
+        throw new AppError(403, "Company context is required");
+    }
+    if (reportType === "daily") {
+        if (!date) {
+            throw new AppError(400, "Date is required for daily report");
+        }
+        if (!validateDateFormat(date)) {
+            throw new AppError(400, "Invalid date format. Use YYYY-MM-DD");
+        }
+        return { dateStart: date, dateEnd: date, reportLabel: date };
+    }
+    if (reportType === "weekly") {
+        if (!date) {
+            throw new AppError(400, "Date is required for weekly report");
+        }
+        if (!validateDateFormat(date)) {
+            throw new AppError(400, "Invalid date format. Use YYYY-MM-DD");
+        }
+        const { start, end } = getWeekBoundaries(date);
+        return { dateStart: start, dateEnd: end, reportLabel: `${start}-to-${end}` };
+    }
+    if (reportType === "yearly") {
+        if (year) {
+            if (!validateYearFormat(year)) {
+                throw new AppError(400, "Invalid year format. Use YYYY");
+            }
+            const { start, end } = getYearBoundaries(year);
+            return { dateStart: start, dateEnd: end, reportLabel: year };
+        }
+        const currentYear = await getCurrentDatePartForAdmin(authUser, "year");
+        const { start, end } = getYearBoundaries(currentYear);
+        return { dateStart: start, dateEnd: end, reportLabel: currentYear };
+    }
+    if (reportType === "custom") {
+        if (!startDate) {
+            throw new AppError(400, "Start date is required for custom date range report");
+        }
+        if (!endDate) {
+            throw new AppError(400, "End date is required for custom date range report");
+        }
+        if (!validateDateFormat(startDate)) {
+            throw new AppError(400, "Invalid start date format. Use YYYY-MM-DD");
+        }
+        if (!validateDateFormat(endDate)) {
+            throw new AppError(400, "Invalid end date format. Use YYYY-MM-DD");
+        }
+        if (endDate < startDate) {
+            throw new AppError(400, "End date cannot be earlier than start date");
+        }
+        return {
+            dateStart: startDate,
+            dateEnd: endDate,
+            reportLabel: `${startDate}-to-${endDate}`,
+        };
+    }
+    // Default: monthly (preserves existing behavior)
+    if (month) {
+        if (!validateMonthFormat(month)) {
+            throw new AppError(400, "Invalid month format. Use YYYY-MM");
+        }
+        const { start, end } = getMonthBoundaries(month);
+        return { dateStart: start, dateEnd: end, reportLabel: month };
+    }
+    const currentMonth = await getCurrentDatePartForAdmin(authUser, "month");
+    const { start, end } = getMonthBoundaries(currentMonth);
+    return { dateStart: start, dateEnd: end, reportLabel: currentMonth };
+}
+async function getCurrentDatePartForAdmin(authUser, part) {
+    if (!authUser.companyId) {
+        throw new AppError(403, "Company context is required");
+    }
+    const [company] = await db
+        .select({ timezone: companies.timezone })
+        .from(companies)
+        .where(eq(companies.id, authUser.companyId))
+        .limit(1);
+    if (!company?.timezone) {
+        throw new AppError(500, "Company timezone not configured");
+    }
+    const currentDate = getDateInTimeZone(company.timezone);
+    if (part === "year")
+        return currentDate.slice(0, 4);
+    if (part === "month")
+        return currentDate.slice(0, 7);
+    return currentDate;
 }
 export async function getAdminAttendanceSummary(authUser) {
     if (!authUser.companyId) {
@@ -566,18 +457,16 @@ async function updateStaffStatus(authUser, staffId, status) {
     if (!authUser.companyId) {
         throw new AppError(403, "Company context is required");
     }
+    // Restrict approval/rejection to MASTER_ADMIN only
+    if (authUser.role !== "MASTER_ADMIN") {
+        throw new AppError(403, "Only Master Admin can approve or reject Staff registrations.");
+    }
     const conditions = [
         eq(users.id, staffId),
         eq(users.companyId, authUser.companyId),
         eq(users.role, "STAFF"),
         eq(users.status, "PENDING"),
     ];
-    if (authUser.role === "ADMIN") {
-        if (!authUser.departmentId) {
-            throw new AppError(403, "Department context is required");
-        }
-        conditions.push(eq(users.departmentId, authUser.departmentId));
-    }
     const [updatedUser] = await db
         .update(users)
         .set({

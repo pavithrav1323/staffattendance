@@ -8,6 +8,7 @@ import { validateEmail } from '../utils/validation';
 interface PendingApprovalData {
   admin?: {
     name: string;
+    role?: string;
   } | null;
 }
 
@@ -84,9 +85,14 @@ const LoginPage = () => {
   };
 
   return (
-    <div className="login-container">
+    <div className="login-container login-page">
       <div className="login-card">
-        <h1>Staff Tracker Geo</h1>
+        <img
+          src="/images/logo.jpeg"
+          alt="Kolej Sains Kesihatan Bersekutu Sungai Buloh logo"
+          className="college-logo"
+        />
+        <h1>Staff Attendance</h1>
         <h2>Login</h2>
         
         {error && (
@@ -121,23 +127,26 @@ const LoginPage = () => {
 
         {pendingApproval && (
           <div className="pending-approval-message">
-            <p className="pending-approval-title">Account Pending Approval</p>
+            <p className="pending-approval-title">Approval Pending</p>
             {pendingApproval.admin?.name ? (
               <>
                 <p className="pending-approval-text">
-                  Your account is waiting for approval from
+                  Your registration request has been sent to:
                 </p>
                 <p className="pending-approval-admin">
                   {pendingApproval.admin.name}
                 </p>
+                <p className="pending-approval-admin-role">
+                  Master Admin
+                </p>
               </>
             ) : (
               <p className="pending-approval-text">
-                Your account is waiting for Admin approval.
+                Your registration request is pending Master Admin approval.
               </p>
             )}
             <p className="pending-approval-hint">
-              You can log in once your Admin approves your account.
+              You can log in once your Master Admin approves your account.
             </p>
           </div>
         )}

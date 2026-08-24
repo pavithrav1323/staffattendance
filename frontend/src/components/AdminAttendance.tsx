@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { adminService, type AttendanceRecord } from '../services/admin.service';
 import { openLocation } from '../utils/map';
+import AssignedTaskCell from './AssignedTaskCell';
 
 interface AdminAttendanceProps {
   staffList: Array<{ employeeId: string; name: string }>;
@@ -18,6 +19,8 @@ const AdminAttendance = ({ staffList }: AdminAttendanceProps) => {
     return `${year}-${month}`;
   });
   const [year, setYear] = useState(() => new Date().getFullYear().toString());
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
   const [employeeId, setEmployeeId] = useState('');
   const [staffSearch, setStaffSearch] = useState('');
   const [page, setPage] = useState(1);
@@ -39,23 +42,85 @@ const AdminAttendance = ({ staffList }: AdminAttendanceProps) => {
   const [loading, setLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [validationError, setValidationError] = useState<string | null>(null);
   const [activeSessionOnly, setActiveSessionOnly] = useState(false);
   const attendanceTableRef = useRef<HTMLDivElement>(null);
 
+  const buildDateParams = (): {
+    date?: string;
+    month?: string;
+    year?: string;
+    startDate?: string;
+    endDate?: string;
+  } => {
+    switch (reportType) {
+      case 'daily':
+        return { date: date || undefined };
+      case 'weekly':
+        return { date: date || undefined };
+      case 'monthly':
+        return { month };
+      case 'yearly':
+        return { year };
+      case 'custom':
+        return {
+          startDate: startDate || undefined,
+          endDate: endDate || undefined,
+        };
+      default:
+        return { month };
+    }
+  };
+
+  const validateFilters = (): string | null => {
+    setValidationError(null);
+
+    if (reportType === 'daily' && !date) {
+      return 'Please select a date for the daily report.';
+    }
+
+    if (reportType === 'weekly' && !date) {
+      return 'Please select a date within the week for the weekly report.';
+    }
+
+    if (reportType === 'custom') {
+      if (!startDate) {
+        return 'Start Date is required for the custom date range report.';
+      }
+      if (!endDate) {
+        return 'End Date is required for the custom date range report.';
+      }
+      if (endDate < startDate) {
+        return 'End Date cannot be earlier than Start Date.';
+      }
+    }
+
+    return null;
+  };
+
   const loadAttendance = async () => {
+    const validationMsg = validateFilters();
+    if (validationMsg) {
+      setValidationError(validationMsg);
+      return;
+    }
+
     try {
       setLoading(true);
       setError(null);
+      const dateParams = buildDateParams();
       const response = await adminService.getAttendance(
         reportType,
-        date || undefined,
-        reportType === 'monthly' ? month : undefined,
-        reportType === 'yearly' ? year : undefined,
+        dateParams.date,
+        dateParams.month,
+        dateParams.year,
+        dateParams.startDate,
+        dateParams.endDate,
         employeeId || undefined,
         page,
         limit
       );
-      
+
       if (response.success && response.data) {
         setAttendance(response.data.records);
         setPagination(response.data);
@@ -139,24 +204,41 @@ const AdminAttendance = ({ staffList }: AdminAttendanceProps) => {
   const handleReportTypeChange = (newReportType: string) => {
     setReportType(newReportType);
     setDate('');
+    setStartDate('');
+    setEndDate('');
+    setValidationError(null);
     setPage(1);
   };
 
   const handleExport = async () => {
+    const validationMsg = validateFilters();
+    if (validationMsg) {
+      setValidationError(validationMsg);
+      return;
+    }
+
     try {
       setExporting(true);
+      const dateParams = buildDateParams();
       const blob = await adminService.exportAttendance(
         reportType,
-        date || undefined,
-        reportType === 'monthly' ? month : undefined,
-        reportType === 'yearly' ? year : undefined,
+        dateParams.date,
+        dateParams.month,
+        dateParams.year,
+        dateParams.startDate,
+        dateParams.endDate,
         employeeId || undefined
       );
-      
+
+      if (blob.size === 0) {
+        setError('No attendance records available to download.');
+        return;
+      }
+
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `attendance-${reportType}-${reportType === 'monthly' ? month : reportType === 'yearly' ? year : date}.csv`;
+      a.download = `attendance-${reportType}-${dateParams.month || dateParams.year || dateParams.date || `${dateParams.startDate}-to-${dateParams.endDate}`}.csv`;
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);
@@ -168,13 +250,10 @@ const AdminAttendance = ({ staffList }: AdminAttendanceProps) => {
     }
   };
 
-  const formatDateTime = (dateString: string | null): string => {
+  const formatTimeOnly = (dateString: string | null): string => {
     if (!dateString) return '--';
     const date = new Date(dateString);
-    return date.toLocaleString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
+    return date.toLocaleTimeString('en-US', {
       hour: '2-digit',
       minute: '2-digit',
       hour12: true
@@ -191,11 +270,9 @@ const AdminAttendance = ({ staffList }: AdminAttendanceProps) => {
     return `${hours} hr${hours > 1 ? 's' : ''} ${remainingMinutes} min`;
   };
 
-  const formatTotalWorkingTime = (minutes: number): string => {
-    const hours = Math.floor(minutes / 60);
-    const remainingMinutes = minutes % 60;
-    if (remainingMinutes === 0) return `${hours} hr${hours > 1 ? 's' : ''}`;
-    return `${hours} hr${hours > 1 ? 's' : ''} ${remainingMinutes} min`;
+  const getWorkingTimeStatus = (minutes: number | null): string => {
+    if (!minutes) return 'neutral';
+    return minutes >= 9 * 60 ? 'complete' : 'short';
   };
 
   const handlePageChange = (newPage: number) => {
@@ -264,6 +341,8 @@ const AdminAttendance = ({ staffList }: AdminAttendanceProps) => {
             })}
           </select>
         );
+      case 'custom':
+        return null;
       default:
         return null;
     }
@@ -275,6 +354,13 @@ const AdminAttendance = ({ staffList }: AdminAttendanceProps) => {
         <div className="error-message">
           {error}
           <button onClick={() => setError(null)} className="close-button">×</button>
+        </div>
+      )}
+
+      {validationError && (
+        <div className="error-message">
+          {validationError}
+          <button onClick={() => setValidationError(null)} className="close-button">×</button>
         </div>
       )}
 
@@ -297,10 +383,6 @@ const AdminAttendance = ({ staffList }: AdminAttendanceProps) => {
           <div className="summary-label">Active Sessions</div>
           <div className="summary-value">{summary.activeSessions}</div>
         </div>
-        <div className="summary-card">
-          <div className="summary-label">Total Working Time</div>
-          <div className="summary-value">{formatTotalWorkingTime(summary.totalWorkingMinutes)}</div>
-        </div>
       </div>
 
       {/* Filters */}
@@ -318,12 +400,37 @@ const AdminAttendance = ({ staffList }: AdminAttendanceProps) => {
               <option value="weekly">Weekly</option>
               <option value="monthly">Monthly</option>
               <option value="yearly">Yearly</option>
+              <option value="custom">Custom Date Range</option>
             </select>
           </div>
 
           <div className="filter-group">
-            <label htmlFor="period">Period</label>
-            {getPeriodInput()}
+            <label htmlFor="period">
+              {reportType === 'custom' ? 'Date Range' : 'Period'}
+            </label>
+            {reportType === 'custom' ? (
+              <div className="custom-date-range">
+                <input
+                  type="date"
+                  id="startDate"
+                  value={startDate}
+                  onChange={(e) => { setStartDate(e.target.value); setPage(1); }}
+                  disabled={loading}
+                  placeholder="Start Date"
+                />
+                <span className="date-range-separator">to</span>
+                <input
+                  type="date"
+                  id="endDate"
+                  value={endDate}
+                  onChange={(e) => { setEndDate(e.target.value); setPage(1); }}
+                  disabled={loading}
+                  placeholder="End Date"
+                />
+              </div>
+            ) : (
+              getPeriodInput()
+            )}
           </div>
         </div>
 
@@ -395,14 +502,14 @@ const AdminAttendance = ({ staffList }: AdminAttendanceProps) => {
             disabled={exporting || loading}
             className="export-button"
           >
-            {exporting ? 'Exporting...' : 'Download Report'}
+            {exporting ? 'Preparing Download...' : 'Download Report'}
           </button>
         </div>
       </div>
 
       {/* Attendance Table */}
       {loading ? (
-        <div className="loading-state">Loading attendance...</div>
+        <div className="loading-state">Loading attendance report...</div>
       ) : attendance.length === 0 ? (
         <div className="empty-state">No attendance records found for the selected period.</div>
       ) : (
@@ -444,6 +551,7 @@ const AdminAttendance = ({ staffList }: AdminAttendanceProps) => {
                         <th>Employee Name</th>
                         <th>Date</th>
                         <th>Clock In</th>
+                        <th>Assigned Task</th>
                         <th>Clock In Location</th>
                         <th>Clock In Method</th>
                         <th>Clock Out</th>
@@ -460,7 +568,10 @@ const AdminAttendance = ({ staffList }: AdminAttendanceProps) => {
                           <td>{record.employeeId}</td>
                           <td>{record.employeeName}</td>
                           <td>{record.attendanceDate}</td>
-                          <td>{formatDateTime(record.clockInTime)}</td>
+                          <td>{formatTimeOnly(record.clockInTime)}</td>
+                          <td className="assigned-task-cell">
+                            <AssignedTaskCell task={record.assignedTask} />
+                          </td>
                           <td>
                             <div className="location-cell">
                               {record.clockInLocationName ? (
@@ -485,7 +596,7 @@ const AdminAttendance = ({ staffList }: AdminAttendanceProps) => {
                               {record.clockInMethod || 'Not recorded'}
                             </span>
                           </td>
-                          <td>{formatDateTime(record.clockOutTime)}</td>
+                          <td>{formatTimeOnly(record.clockOutTime)}</td>
                           <td>
                             <div className="location-cell">
                               {record.clockOutLocationName ? (
@@ -510,7 +621,20 @@ const AdminAttendance = ({ staffList }: AdminAttendanceProps) => {
                               {record.clockOutMethod || 'Not recorded'}
                             </span>
                           </td>
-                          <td>{formatWorkingTime(record.workingMinutes)}</td>
+                          <td>
+                            <span
+                              className={`working-time-badge working-time-${getWorkingTimeStatus(record.workingMinutes)}`}
+                              title={
+                                record.workingMinutes == null
+                                  ? undefined
+                                  : record.workingMinutes >= 9 * 60
+                                  ? 'Completed 9+ hours'
+                                  : 'Below 9 hours'
+                              }
+                            >
+                              {formatWorkingTime(record.workingMinutes)}
+                            </span>
+                          </td>
                           <td>{record.attendanceStatus}</td>
                           <td>{record.sessionStatus}</td>
                         </tr>

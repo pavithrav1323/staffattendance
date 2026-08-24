@@ -51,7 +51,7 @@ const StaffChangePasswordPage = () => {
   return (
     <div className="login-container">
       <div className="login-card">
-        <h1>Staff Tracker Geo</h1>
+        <h1>Staff Attendance</h1>
         <h2>Change Password</h2>
 
         <p style={{ marginBottom: '1rem', fontSize: '14px', color: '#475569', textAlign: 'center' }}>

@@ -7,7 +7,7 @@ import { AppError } from "../../utils/app-error.js";
 import { users } from "../../db/schema/users.js";
 import { hashPassword } from "../../utils/password.js";
 import { normalizeEmail, normalizeEmployeeId, } from "../../utils/normalization.js";
-import { getDateInTimeZone, getMonthBoundaries, validateMonthFormat, } from "../../utils/date.js";
+import { getDateInTimeZone, getMonthBoundaries, getWeekBoundaries, getYearBoundaries, validateDateFormat, validateMonthFormat, validateYearFormat, formatTimeOnly, } from "../../utils/date.js";
 import { generateCSVRow } from "../../utils/csv.js";
 export async function createAdmin(authUser, input) {
     if (!authUser.companyId) {
@@ -24,6 +24,17 @@ export async function createAdmin(authUser, input) {
         .limit(1);
     if (!department) {
         throw new AppError(404, "Department not found");
+    }
+    // Check if an admin already exists for the same Company ID + Department
+    const [existingAdmin] = await db
+        .select({
+        id: users.id,
+    })
+        .from(users)
+        .where(and(eq(users.companyId, authUser.companyId), eq(users.departmentId, input.departmentId), eq(users.role, "ADMIN")))
+        .limit(1);
+    if (existingAdmin) {
+        throw new AppError(409, "An Admin already exists for this Company ID and Department.");
     }
     const [existingUser] = await db
         .select({
@@ -242,7 +253,7 @@ export async function createDepartment(authUser, input) {
         .where(and(eq(departments.companyId, authUser.companyId), ilike(departments.code, input.code)))
         .limit(1);
     if (existingByCode) {
-        throw new AppError(409, "Department already exists");
+        throw new AppError(409, "This department already exists for the selected Company ID.");
     }
     const [existingByName] = await db
         .select({
@@ -252,7 +263,7 @@ export async function createDepartment(authUser, input) {
         .where(and(eq(departments.companyId, authUser.companyId), ilike(departments.name, input.name)))
         .limit(1);
     if (existingByName) {
-        throw new AppError(409, "Department already exists");
+        throw new AppError(409, "This department already exists for the selected Company ID.");
     }
     const [department] = await db
         .insert(departments)
@@ -269,7 +280,7 @@ export async function createDepartment(authUser, input) {
     });
     return department;
 }
-export async function getMasterAdminAttendance(authUser, month, departmentId, employeeId, page, limit) {
+export async function getMasterAdminAttendance(authUser, reportType, date, month, year, startDate, endDate, departmentId, employeeId, page, limit) {
     if (!authUser.companyId) {
         throw new AppError(403, "Company context is required");
     }
@@ -284,28 +295,7 @@ export async function getMasterAdminAttendance(authUser, month, departmentId, em
         currentLimit > 100) {
         throw new AppError(400, "Invalid limit");
     }
-    let targetMonth;
-    if (month) {
-        if (!validateMonthFormat(month)) {
-            throw new AppError(400, "Invalid month format. Use YYYY-MM");
-        }
-        targetMonth = month;
-    }
-    else {
-        const [company] = await db
-            .select({
-            timezone: companies.timezone,
-        })
-            .from(companies)
-            .where(eq(companies.id, authUser.companyId))
-            .limit(1);
-        if (!company?.timezone) {
-            throw new AppError(500, "Company timezone not configured");
-        }
-        const currentDate = getDateInTimeZone(company.timezone);
-        targetMonth = currentDate.slice(0, 7);
-    }
-    const { start: monthStart, end: monthEnd } = getMonthBoundaries(targetMonth);
+    const { dateStart, dateEnd, reportLabel } = await resolveMasterAdminDateRange(authUser, reportType, date, month, year, startDate, endDate);
     let departmentUuid;
     if (departmentId) {
         const [department] = await db
@@ -344,8 +334,8 @@ export async function getMasterAdminAttendance(authUser, month, departmentId, em
     }
     const conditions = [
         eq(attendance.companyId, authUser.companyId),
-        gte(attendance.attendanceDate, monthStart),
-        lte(attendance.attendanceDate, monthEnd),
+        gte(attendance.attendanceDate, dateStart),
+        lte(attendance.attendanceDate, dateEnd),
     ];
     if (departmentUuid) {
         conditions.push(eq(attendance.departmentId, departmentUuid));
@@ -375,6 +365,7 @@ export async function getMasterAdminAttendance(authUser, month, departmentId, em
         clockInLongitude: attendance.clockInLongitude,
         clockInLocationName: attendance.clockInLocationName,
         clockInMethod: attendance.clockInMethod,
+        assignedTask: attendance.assignedTask,
         clockOutTime: attendance.clockOutTime,
         clockOutLatitude: attendance.clockOutLatitude,
         clockOutLongitude: attendance.clockOutLongitude,
@@ -391,7 +382,7 @@ export async function getMasterAdminAttendance(authUser, month, departmentId, em
         .limit(currentLimit)
         .offset(offset);
     return {
-        month: targetMonth,
+        period: reportLabel,
         page: currentPage,
         limit: currentLimit,
         total,
@@ -399,32 +390,18 @@ export async function getMasterAdminAttendance(authUser, month, departmentId, em
         records,
     };
 }
-export async function getMasterAdminAttendanceExport(authUser, month, departmentId, employeeId) {
+export async function getMasterAdminAttendanceExport(authUser, reportType, date, month, year, startDate, endDate, departmentId, employeeId, browserTimezone) {
     if (!authUser.companyId) {
         throw new AppError(403, "Company context is required");
     }
-    let targetMonth;
-    if (month) {
-        if (!validateMonthFormat(month)) {
-            throw new AppError(400, "Invalid month format. Use YYYY-MM");
-        }
-        targetMonth = month;
-    }
-    else {
-        const [company] = await db
-            .select({
-            timezone: companies.timezone,
-        })
-            .from(companies)
-            .where(eq(companies.id, authUser.companyId))
-            .limit(1);
-        if (!company?.timezone) {
-            throw new AppError(500, "Company timezone not configured");
-        }
-        const currentDate = getDateInTimeZone(company.timezone);
-        targetMonth = currentDate.slice(0, 7);
-    }
-    const { start: monthStart, end: monthEnd } = getMonthBoundaries(targetMonth);
+    // Use browser timezone from request, fall back to company timezone
+    const [company] = await db
+        .select({ timezone: companies.timezone })
+        .from(companies)
+        .where(eq(companies.id, authUser.companyId))
+        .limit(1);
+    const timezone = browserTimezone || company?.timezone;
+    const { dateStart, dateEnd, reportLabel } = await resolveMasterAdminDateRange(authUser, reportType, date, month, year, startDate, endDate);
     let departmentUuid;
     if (departmentId) {
         const [department] = await db
@@ -463,8 +440,8 @@ export async function getMasterAdminAttendanceExport(authUser, month, department
     }
     const conditions = [
         eq(attendance.companyId, authUser.companyId),
-        gte(attendance.attendanceDate, monthStart),
-        lte(attendance.attendanceDate, monthEnd),
+        gte(attendance.attendanceDate, dateStart),
+        lte(attendance.attendanceDate, dateEnd),
     ];
     if (departmentUuid) {
         conditions.push(eq(attendance.departmentId, departmentUuid));
@@ -477,12 +454,14 @@ export async function getMasterAdminAttendanceExport(authUser, month, department
         employeeId: users.employeeId,
         employeeName: users.name,
         departmentId: attendance.departmentId,
+        departmentName: departments.name,
         attendanceDate: attendance.attendanceDate,
         clockInTime: attendance.clockInTime,
         clockInLatitude: attendance.clockInLatitude,
         clockInLongitude: attendance.clockInLongitude,
         clockInLocationName: attendance.clockInLocationName,
         clockInMethod: attendance.clockInMethod,
+        assignedTask: attendance.assignedTask,
         clockOutTime: attendance.clockOutTime,
         clockOutLatitude: attendance.clockOutLatitude,
         clockOutLongitude: attendance.clockOutLongitude,
@@ -494,6 +473,7 @@ export async function getMasterAdminAttendanceExport(authUser, month, department
     })
         .from(attendance)
         .innerJoin(users, eq(attendance.employeeId, users.id))
+        .leftJoin(departments, eq(attendance.departmentId, departments.id))
         .where(and(...conditions))
         .orderBy(desc(attendance.attendanceDate), desc(attendance.clockInTime));
     // Generate CSV
@@ -501,8 +481,10 @@ export async function getMasterAdminAttendanceExport(authUser, month, department
         "Employee ID",
         "Employee Name",
         "Department ID",
+        "Department Name",
         "Attendance Date",
         "Clock In Time",
+        "Assigned Task",
         "Clock In Location Name",
         "Clock In Map",
         "Clock In Method",
@@ -523,12 +505,14 @@ export async function getMasterAdminAttendanceExport(authUser, month, department
         record.employeeId,
         record.employeeName,
         record.departmentId,
+        record.departmentName || "Not available",
         record.attendanceDate,
-        record.clockInTime?.toISOString(),
+        formatTimeOnly(record.clockInTime, timezone),
+        record.assignedTask || "",
         record.clockInLocationName || "Not available",
         getLocationUrl(record.clockInLatitude, record.clockInLongitude),
         record.clockInMethod || "Not recorded",
-        record.clockOutTime?.toISOString(),
+        formatTimeOnly(record.clockOutTime, timezone),
         record.clockOutLocationName || "Not available",
         getLocationUrl(record.clockOutLatitude, record.clockOutLongitude),
         record.clockOutMethod || "Not recorded",
@@ -537,9 +521,104 @@ export async function getMasterAdminAttendanceExport(authUser, month, department
         record.sessionStatus,
     ]));
     const csv = [header, ...rows].join("\n");
+    const filename = `attendance-${reportType || "monthly"}-${reportLabel}.csv`;
     return {
         csv,
-        filename: `attendance-${targetMonth}.csv`,
+        filename,
     };
+}
+/**
+ * Resolves the date range (start/end) and a human-readable label
+ * for a Master Admin attendance report based on the report type.
+ * Reuses the same boundary logic as the Admin attendance service.
+ */
+async function resolveMasterAdminDateRange(authUser, reportType, date, month, year, startDate, endDate) {
+    if (reportType === "daily") {
+        if (!date) {
+            throw new AppError(400, "Date is required for daily report");
+        }
+        if (!validateDateFormat(date)) {
+            throw new AppError(400, "Invalid date format. Use YYYY-MM-DD");
+        }
+        return { dateStart: date, dateEnd: date, reportLabel: date };
+    }
+    if (reportType === "weekly") {
+        if (!date) {
+            throw new AppError(400, "Date is required for weekly report");
+        }
+        if (!validateDateFormat(date)) {
+            throw new AppError(400, "Invalid date format. Use YYYY-MM-DD");
+        }
+        const { start, end } = getWeekBoundaries(date);
+        return { dateStart: start, dateEnd: end, reportLabel: `${start}-to-${end}` };
+    }
+    if (reportType === "yearly") {
+        if (year) {
+            if (!validateYearFormat(year)) {
+                throw new AppError(400, "Invalid year format. Use YYYY");
+            }
+            const { start, end } = getYearBoundaries(year);
+            return { dateStart: start, dateEnd: end, reportLabel: year };
+        }
+        const currentYear = await getCurrentDatePart(authUser, "year");
+        const { start, end } = getYearBoundaries(currentYear);
+        return { dateStart: start, dateEnd: end, reportLabel: currentYear };
+    }
+    if (reportType === "custom") {
+        if (!startDate) {
+            throw new AppError(400, "Start date is required for custom date range report");
+        }
+        if (!endDate) {
+            throw new AppError(400, "End date is required for custom date range report");
+        }
+        if (!validateDateFormat(startDate)) {
+            throw new AppError(400, "Invalid start date format. Use YYYY-MM-DD");
+        }
+        if (!validateDateFormat(endDate)) {
+            throw new AppError(400, "Invalid end date format. Use YYYY-MM-DD");
+        }
+        if (endDate < startDate) {
+            throw new AppError(400, "End date cannot be earlier than start date");
+        }
+        return {
+            dateStart: startDate,
+            dateEnd: endDate,
+            reportLabel: `${startDate}-to-${endDate}`,
+        };
+    }
+    // Default: monthly (preserves existing behavior)
+    if (month) {
+        if (!validateMonthFormat(month)) {
+            throw new AppError(400, "Invalid month format. Use YYYY-MM");
+        }
+        const { start, end } = getMonthBoundaries(month);
+        return { dateStart: start, dateEnd: end, reportLabel: month };
+    }
+    const currentMonth = await getCurrentDatePart(authUser, "month");
+    const { start, end } = getMonthBoundaries(currentMonth);
+    return { dateStart: start, dateEnd: end, reportLabel: currentMonth };
+}
+/**
+ * Returns the current date in the company's timezone.
+ * `part` controls whether the full date, the YYYY-MM month, or YYYY year is returned.
+ */
+async function getCurrentDatePart(authUser, part) {
+    if (!authUser.companyId) {
+        throw new AppError(403, "Company context is required");
+    }
+    const [company] = await db
+        .select({ timezone: companies.timezone })
+        .from(companies)
+        .where(eq(companies.id, authUser.companyId))
+        .limit(1);
+    if (!company?.timezone) {
+        throw new AppError(500, "Company timezone not configured");
+    }
+    const currentDate = getDateInTimeZone(company.timezone);
+    if (part === "year")
+        return currentDate.slice(0, 4);
+    if (part === "month")
+        return currentDate.slice(0, 7);
+    return currentDate;
 }
 //# sourceMappingURL=master-admin.service.js.map

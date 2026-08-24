@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useNavigate, useLocation, Outlet } from 'react-router-dom';
 import { authService } from '../services/auth.service';
 
@@ -6,6 +6,13 @@ const MasterAdminLayout = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  const currentUser = authService.getCurrentUser();
+  const displayRole = useMemo(() => {
+    const role = 'MASTER ADMIN';
+    const deptName = currentUser?.departmentName;
+    return deptName ? `${role} - ${deptName}` : role;
+  }, [currentUser?.departmentName]);
 
   const handleLogout = async () => {
     try {
@@ -19,17 +26,19 @@ const MasterAdminLayout = () => {
 
   const menuItems = [
     { path: '/master-admin', label: 'Dashboard' },
-    { path: '/master-admin/attendance', label: 'Attendance' },
-    { path: '/master-admin/departments', label: 'Departments' },
     { path: '/master-admin/admins', label: 'Admin Management' },
+    { path: '/master-admin/attendance', label: 'Attendance Report' },
+    { path: '/master-admin/staff', label: 'Staff Requests' },
+    { path: '/master-admin/departments', label: 'Department' },
   ];
 
   const getPageTitle = () => {
     const path = location.pathname;
     if (path === '/master-admin') return 'Dashboard';
-    if (path === '/master-admin/attendance') return 'Attendance';
-    if (path === '/master-admin/departments') return 'Departments';
+    if (path === '/master-admin/attendance') return 'Attendance Report';
+    if (path === '/master-admin/departments') return 'Department';
     if (path === '/master-admin/admins') return 'Admin Management';
+    if (path === '/master-admin/staff') return 'Staff Requests';
     return 'Dashboard';
   };
 
@@ -49,8 +58,8 @@ const MasterAdminLayout = () => {
       {/* Sidebar */}
       <div className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
         <div className="sidebar-header">
-          <h2 className="app-name">Staff Tracker Geo</h2>
-          <p className="user-role">Master Admin</p>
+          <h2 className="app-name">Staff Attendance</h2>
+          <p className="user-role">{displayRole}</p>
         </div>
 
         <nav className="sidebar-nav">

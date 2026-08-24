@@ -55,7 +55,7 @@ const InstallAppButton = () => {
       type="button"
       onClick={handleInstall}
       className="install-app-button"
-      aria-label="Install Staff Tracker Geo"
+      aria-label="Install Staff Attendance"
     >
       Install App
     </button>

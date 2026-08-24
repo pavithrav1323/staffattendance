@@ -12,7 +12,7 @@ import webauthnRoutes from "./routes/webauthn.routes.js";
 
 const app = express();
 
-const PORT = 5000;
+const PORT = Number(process.env.PORT) || 5000;
 
 const allowedOrigins = new Set([
   "http://localhost:5173",
@@ -21,8 +21,12 @@ const allowedOrigins = new Set([
   "http://localhost:5174",
   "http://127.0.0.1:5174",
   "http://192.168.1.42:5174",
-  process.env.FRONTEND_URL,
+  "https://staffattendance.pages.dev",
 ]);
+
+if (process.env.FRONTEND_URL) {
+  allowedOrigins.add(process.env.FRONTEND_URL);
+}
 
 app.use(
   cors({

@@ -6,6 +6,7 @@ import {
   numeric,
   integer,
   varchar,
+  text,
 } from "drizzle-orm/pg-core";
 
 import { companies } from "./companies.js";
@@ -71,6 +72,8 @@ export const attendance = pgTable("attendance", {
   clockInMethod: varchar("clock_in_method", {
     length: 20,
   }),
+
+  assignedTask: text("assigned_task"),
 
   clockOutTime: timestamp("clock_out_time", {
     withTimezone: true,

@@ -97,6 +97,14 @@ router.get(
         ? String(req.query.year)
         : undefined;
 
+      const startDate = req.query.startDate
+        ? String(req.query.startDate)
+        : undefined;
+
+      const endDate = req.query.endDate
+        ? String(req.query.endDate)
+        : undefined;
+
       const employeeId = req.query.employeeId
         ? String(req.query.employeeId)
         : undefined;
@@ -115,6 +123,8 @@ router.get(
         date,
         month,
         year,
+        startDate,
+        endDate,
         employeeId,
         page,
         limit
@@ -160,8 +170,20 @@ router.get(
         ? String(req.query.year)
         : undefined;
 
+      const startDate = req.query.startDate
+        ? String(req.query.startDate)
+        : undefined;
+
+      const endDate = req.query.endDate
+        ? String(req.query.endDate)
+        : undefined;
+
       const employeeId = req.query.employeeId
         ? String(req.query.employeeId)
+        : undefined;
+
+      const timezone = req.query.timezone
+        ? String(req.query.timezone)
         : undefined;
 
       const { csv, filename } = await getAdminAttendanceExport(
@@ -170,7 +192,10 @@ router.get(
         date,
         month,
         year,
-        employeeId
+        startDate,
+        endDate,
+        employeeId,
+        timezone
       );
 
       res.setHeader("Content-Type", "text/csv; charset=utf-8");
@@ -188,10 +213,13 @@ router.get(
 
 /**
  * GET /api/admin/pending-staff
+ * Restricted to MASTER_ADMIN only
  */
 router.get(
   "/pending-staff",
-  ...adminAccess,
+  authenticateToken,
+  allowRoles("MASTER_ADMIN"),
+  requireCompanyContext,
   async (
     req: AuthRequest,
     res: Response,
@@ -212,10 +240,13 @@ router.get(
 
 /**
  * PATCH /api/admin/staff/:id/approve
+ * Restricted to MASTER_ADMIN only
  */
 router.patch(
   "/staff/:id/approve",
-  ...adminAccess,
+  authenticateToken,
+  allowRoles("MASTER_ADMIN"),
+  requireCompanyContext,
   async (
     req: AuthRequest,
     res: Response,
@@ -242,10 +273,13 @@ router.patch(
 
 /**
  * PATCH /api/admin/staff/:id/reject
+ * Restricted to MASTER_ADMIN only
  */
 router.patch(
   "/staff/:id/reject",
-  ...adminAccess,
+  authenticateToken,
+  allowRoles("MASTER_ADMIN"),
+  requireCompanyContext,
   async (
     req: AuthRequest,
     res: Response,

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useNavigate, useLocation, Outlet } from 'react-router-dom';
 import { authService } from '../services/auth.service';
 
@@ -6,6 +6,13 @@ const AdminLayout = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  const currentUser = authService.getCurrentUser();
+  const displayRole = useMemo(() => {
+    const role = 'ADMIN';
+    const deptName = currentUser?.departmentName;
+    return deptName ? `${role} - ${deptName}` : role;
+  }, [currentUser?.departmentName]);
 
   const handleLogout = async () => {
     try {
@@ -20,14 +27,14 @@ const AdminLayout = () => {
   const menuItems = [
     { path: '/admin', label: 'Dashboard' },
     { path: '/admin/staff', label: 'Staff Management' },
-    { path: '/admin/attendance', label: 'Attendance Management' },
+    { path: '/admin/attendance', label: 'Attendance Report' },
   ];
 
   const getPageTitle = () => {
     const path = location.pathname;
     if (path === '/admin') return 'Dashboard';
     if (path === '/admin/staff') return 'Staff Management';
-    if (path === '/admin/attendance') return 'Attendance Management';
+    if (path === '/admin/attendance') return 'Attendance Report';
     return 'Dashboard';
   };
 
@@ -44,8 +51,8 @@ const AdminLayout = () => {
 
       <div className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
         <div className="sidebar-header">
-          <h2 className="app-name">Staff Tracker Geo</h2>
-          <p className="user-role">Admin</p>
+          <h2 className="app-name">Staff Attendance</h2>
+          <p className="user-role">{displayRole}</p>
         </div>
 
         <nav className="sidebar-nav">

@@ -11,6 +11,14 @@ interface CurrentSession {
   clockInLocationStatus: 'INSIDE_GEOFENCE' | 'OUTSIDE_GEOFENCE';
   clockInDistanceMeters: number;
   clockInMethod?: string | null;
+  assignedTask?: string | null;
+}
+
+interface PendingClockIn {
+  latitude: number;
+  longitude: number;
+  accuracy: number;
+  method: 'BIOMETRIC' | 'MANUAL';
 }
 
 const AttendanceClock = () => {
@@ -28,6 +36,10 @@ const AttendanceClock = () => {
   const [pendingManualAction, setPendingManualAction] = useState<'in' | 'out' | null>(null);
   const [permissionGuidance, setPermissionGuidance] = useState<string | null>(null);
   const [gpsDebugInfo, setGpsDebugInfo] = useState<any>(null);
+  const [pendingClockIn, setPendingClockIn] = useState<PendingClockIn | null>(null);
+  const [assignedTask, setAssignedTask] = useState('');
+  const [assignedTaskError, setAssignedTaskError] = useState<string | null>(null);
+  const [clockInSubmitting, setClockInSubmitting] = useState(false);
 
   const manualAllowed =
     biometricStatus === 'unavailable' ||
@@ -124,7 +136,21 @@ const AttendanceClock = () => {
       const location = await getCurrentLocation();
       // Clear permission guidance once location is successfully obtained
       setPermissionGuidance(null);
-      
+
+      if (action === 'in') {
+        // For clock-in: store location and open Assigned Task popup
+        setPendingClockIn({
+          latitude: location.latitude,
+          longitude: location.longitude,
+          accuracy: location.accuracy,
+          method,
+        });
+        setAssignedTask('');
+        setAssignedTaskError(null);
+        return;
+      }
+
+      // For clock-out: proceed directly
       const request = {
         latitude: location.latitude,
         longitude: location.longitude,
@@ -132,18 +158,12 @@ const AttendanceClock = () => {
         method,
       };
 
-      const response = action === 'in'
-        ? await attendanceService.clockIn(request)
-        : await attendanceService.clockOut(request);
+      const response = await attendanceService.clockOut(request);
 
       if (response.success) {
-        setSuccess(action === 'in' ? 'Clock in successful!' : 'Clock out successful!');
-        if (action === 'in') {
-          await loadCurrentSession();
-        } else {
-          setCurrentSession(null);
-          setWorkingTime('00:00:00');
-        }
+        setSuccess('Clock out successful!');
+        setCurrentSession(null);
+        setWorkingTime('00:00:00');
       }
     } catch (err: any) {
       const errorMessage = err.message || `Clock ${action === 'in' ? 'in' : 'out'} failed`;
@@ -184,6 +204,62 @@ const AttendanceClock = () => {
       }
     } finally {
       setLocationLoading(false);
+    }
+  };
+
+  const cancelAssignedTask = () => {
+    setPendingClockIn(null);
+    setAssignedTask('');
+    setAssignedTaskError(null);
+  };
+
+  const confirmAssignedTask = async () => {
+    if (!pendingClockIn) return;
+
+    const trimmedTask = assignedTask.trim();
+    if (!trimmedTask) {
+      setAssignedTaskError('Assigned task is required.');
+      return;
+    }
+
+    if (trimmedTask.length > 500) {
+      setAssignedTaskError('Assigned task must not exceed 500 characters.');
+      return;
+    }
+
+    setClockInSubmitting(true);
+    setAssignedTaskError(null);
+    try {
+      const request = {
+        latitude: pendingClockIn.latitude,
+        longitude: pendingClockIn.longitude,
+        accuracy: pendingClockIn.accuracy,
+        method: pendingClockIn.method,
+        assignedTask: trimmedTask,
+      };
+
+      const response = await attendanceService.clockIn(request);
+
+      if (response.success) {
+        setSuccess('Clock in successful!');
+        setPendingClockIn(null);
+        setAssignedTask('');
+        await loadCurrentSession();
+      }
+    } catch (err: any) {
+      const errorMessage = err.message || 'Clock in failed';
+
+      if (errorMessage.includes('already has an active clock-in session')) {
+        setSuccess('An active attendance session already exists.');
+        setPendingClockIn(null);
+        setAssignedTask('');
+        await loadCurrentSession();
+      } else {
+        setError(errorMessage);
+        // Keep popup open so user can retry
+      }
+    } finally {
+      setClockInSubmitting(false);
     }
   };
 
@@ -420,7 +496,7 @@ Attempt: ${gpsDebugInfo.attempt}`;
 
         {permissionGuidance && (
           <div className="success-message-overlay">
-            <div className="success-message" style={{ backgroundColor: '#eff6ff', borderLeftColor: '#2563eb', color: '#1e40af' }}>
+            <div className="success-message permission-guidance-message">
               {permissionGuidance}
               <button onClick={() => setPermissionGuidance(null)} className="close-button">×</button>
             </div>
@@ -538,6 +614,55 @@ Attempt: ${gpsDebugInfo.attempt}`;
                   type="button"
                 >
                   {locationLoading ? 'Getting location...' : `Confirm ${pendingManualAction === 'in' ? 'Clock In' : 'Clock Out'}`}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Assigned Task Modal */}
+        {pendingClockIn && (
+          <div className="modal-overlay" onClick={cancelAssignedTask}>
+            <div className="modal-content assigned-task-modal" onClick={(e) => e.stopPropagation()}>
+              <h3>Assigned Task</h3>
+              <p className="assigned-task-description">
+                Enter the task assigned to you for this work session.
+              </p>
+              <textarea
+                className="assigned-task-textarea"
+                value={assignedTask}
+                onChange={(e) => {
+                  setAssignedTask(e.target.value);
+                  if (assignedTaskError) setAssignedTaskError(null);
+                }}
+                placeholder="Enter your assigned task..."
+                maxLength={500}
+                rows={4}
+                autoFocus
+                disabled={clockInSubmitting}
+              />
+              {assignedTaskError && (
+                <div className="assigned-task-error">{assignedTaskError}</div>
+              )}
+              <div className="assigned-task-char-count">
+                {assignedTask.length}/500
+              </div>
+              <div className="modal-actions">
+                <button
+                  onClick={cancelAssignedTask}
+                  className="action-btn action-btn-cancel"
+                  type="button"
+                  disabled={clockInSubmitting}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmAssignedTask}
+                  disabled={clockInSubmitting}
+                  className="action-btn action-btn-confirm"
+                  type="button"
+                >
+                  {clockInSubmitting ? 'Clocking In...' : 'Proceed'}
                 </button>
               </div>
             </div>

@@ -18,6 +18,34 @@ interface Admin {
   status: string;
 }
 
+interface PendingStaff {
+  id: string;
+  employeeId: string;
+  name: string;
+  email: string;
+  phone: string | null;
+  designation: string | null;
+  departmentId: string;
+  departmentName: string | null;
+  departmentCode: string | null;
+  status: string;
+  createdAt: string;
+}
+
+interface ApprovedStaff {
+  id: string;
+  employeeId: string;
+  name: string;
+  email: string;
+  phone: string | null;
+  designation: string | null;
+  departmentId: string;
+  departmentName: string | null;
+  departmentCode: string | null;
+  status: string;
+  createdAt: string;
+}
+
 interface AttendanceRecord {
   id: string;
   employeeId: string;
@@ -29,6 +57,7 @@ interface AttendanceRecord {
   clockInLongitude: string | null;
   clockInLocationName: string | null;
   clockInMethod: string | null;
+  assignedTask: string | null;
   clockOutTime: string | null;
   clockOutLatitude: string | null;
   clockOutLongitude: string | null;
@@ -42,7 +71,7 @@ interface AttendanceRecord {
 interface AttendanceResponse {
   success: boolean;
   data?: {
-    month: string;
+    period: string;
     page: number;
     limit: number;
     total: number;
@@ -108,9 +137,25 @@ export const masterAdminService = {
     return apiRequest(`/master-admin/admins/${id}/deactivate`, 'PATCH');
   },
 
-  getAttendance: async (month?: string, departmentId?: string, employeeId?: string, page?: number, limit?: number): Promise<AttendanceResponse> => {
+  getAttendance: async (
+    reportType?: string,
+    date?: string,
+    month?: string,
+    year?: string,
+    startDate?: string,
+    endDate?: string,
+    departmentId?: string,
+    employeeId?: string,
+    page?: number,
+    limit?: number
+  ): Promise<AttendanceResponse> => {
     const params = new URLSearchParams();
+    if (reportType) params.append('reportType', reportType);
+    if (date) params.append('date', date);
     if (month) params.append('month', month);
+    if (year) params.append('year', year);
+    if (startDate) params.append('startDate', startDate);
+    if (endDate) params.append('endDate', endDate);
     if (departmentId) params.append('departmentId', departmentId);
     if (employeeId) params.append('employeeId', employeeId);
     if (page) params.append('page', page.toString());
@@ -118,11 +163,27 @@ export const masterAdminService = {
     return apiRequest(`/master-admin/attendance?${params.toString()}`, 'GET');
   },
 
-  exportAttendance: async (month?: string, departmentId?: string, employeeId?: string): Promise<Blob> => {
+  exportAttendance: async (
+    reportType?: string,
+    date?: string,
+    month?: string,
+    year?: string,
+    startDate?: string,
+    endDate?: string,
+    departmentId?: string,
+    employeeId?: string
+  ): Promise<Blob> => {
     const params = new URLSearchParams();
+    if (reportType) params.append('reportType', reportType);
+    if (date) params.append('date', date);
     if (month) params.append('month', month);
+    if (year) params.append('year', year);
+    if (startDate) params.append('startDate', startDate);
+    if (endDate) params.append('endDate', endDate);
     if (departmentId) params.append('departmentId', departmentId);
     if (employeeId) params.append('employeeId', employeeId);
+    const browserTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (browserTimezone) params.append('timezone', browserTimezone);
 
     const queryString = params.toString();
     const token = localStorage.getItem('accessToken');
@@ -157,5 +218,21 @@ export const masterAdminService = {
     }
 
     return response.blob();
+  },
+
+  getPendingStaff: async (): Promise<{ success: boolean; data?: PendingStaff[] }> => {
+    return apiRequest('/master-admin/staff/pending', 'GET');
+  },
+
+  approveStaff: async (staffId: string): Promise<CreateResponse> => {
+    return apiRequest(`/master-admin/staff/${staffId}/approve`, 'PATCH');
+  },
+
+  rejectStaff: async (staffId: string): Promise<CreateResponse> => {
+    return apiRequest(`/master-admin/staff/${staffId}/reject`, 'PATCH');
+  },
+
+  getApprovedStaff: async (): Promise<{ success: boolean; data?: ApprovedStaff[] }> => {
+    return apiRequest('/master-admin/staff/approved', 'GET');
   },
 };

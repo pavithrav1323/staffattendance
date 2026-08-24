@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { authService } from '../services/auth.service';
 import CountryCodePicker, { type Country, countries } from '../components/CountryCodePicker';
 import InstallAppButton from '../components/InstallAppButton';
+import CompanyDropdown from '../components/CompanyDropdown';
 import { validateEmail, validatePhone, validatePassword, validateName, validateEmployeeId, getPhoneMaxLength, getPhoneValidationError } from '../utils/validation';
 
 interface Department {
@@ -11,9 +12,18 @@ interface Department {
   code: string;
 }
 
+interface Company {
+  id: string;
+  companyCode: string;
+  companyName: string;
+}
+
 const StaffRegisterPage = () => {
   const navigate = useNavigate();
-  const [companyCode, setCompanyCode] = useState('');
+  const [companies, setCompanies] = useState<Company[]>([]);
+  const [companiesLoading, setCompaniesLoading] = useState(false);
+  const [selectedCompanyId, setSelectedCompanyId] = useState('');
+  const [selectedCompanyCode, setSelectedCompanyCode] = useState('');
   const [departments, setDepartments] = useState<Department[]>([]);
   const [departmentsLoading, setDepartmentsLoading] = useState(false);
   const [companyFound, setCompanyFound] = useState(false);
@@ -35,12 +45,30 @@ const StaffRegisterPage = () => {
     name: string;
     status: string;
     adminName: string | null;
+    adminRole: string | null;
   } | null>(null);
 
   useEffect(() => {
+    const loadCompanies = async () => {
+      try {
+        setCompaniesLoading(true);
+        setError(null);
+        const data = await authService.getPublicCompanies();
+        setCompanies(data);
+      } catch (err: any) {
+        setError(err.message || 'Unable to load ILKKM IDs. Please try again.');
+        setCompanies([]);
+      } finally {
+        setCompaniesLoading(false);
+      }
+    };
+
+    loadCompanies();
+  }, []);
+
+  useEffect(() => {
     const loadDepartments = async () => {
-      const trimmed = companyCode.trim();
-      if (!trimmed) {
+      if (!selectedCompanyCode) {
         setDepartments([]);
         setCompanyFound(false);
         setDepartmentId('');
@@ -54,7 +82,7 @@ const StaffRegisterPage = () => {
       setDepartmentId('');
 
       try {
-        const data = await authService.getPublicDepartments(trimmed);
+        const data = await authService.getPublicDepartments(selectedCompanyCode);
         setDepartments(data);
         setCompanyFound(true);
       } catch (err: any) {
@@ -66,9 +94,8 @@ const StaffRegisterPage = () => {
       }
     };
 
-    const timeout = setTimeout(loadDepartments, 300);
-    return () => clearTimeout(timeout);
-  }, [companyCode]);
+    loadDepartments();
+  }, [selectedCompanyCode]);
 
   const handlePhoneChange = (value: string) => {
     const digits = value.replace(/\D/g, '');
@@ -80,11 +107,11 @@ const StaffRegisterPage = () => {
     let isValid = true;
     let message = '';
 
-    if (!companyCode.trim()) {
-      message = 'Company code is required';
+    if (!selectedCompanyId) {
+      message = 'Please select an ILKKM ID';
       isValid = false;
     } else if (!companyFound) {
-      message = 'Please enter a valid company code';
+      message = 'Please select a valid ILKKM ID';
       isValid = false;
     } else if (!employeeId.trim()) {
       message = 'Employee ID is required';
@@ -104,7 +131,10 @@ const StaffRegisterPage = () => {
     } else if (!validateEmail(email.trim())) {
       message = 'Enter a valid email address';
       isValid = false;
-    } else if (phone && !validatePhone(phone, selectedCountry.code)) {
+    } else if (!phone) {
+      message = 'Phone number is required';
+      isValid = false;
+    } else if (!validatePhone(phone, selectedCountry.code)) {
       message = getPhoneValidationError(selectedCountry.code, selectedCountry.name);
       isValid = false;
     } else if (!password) {
@@ -136,11 +166,11 @@ const StaffRegisterPage = () => {
     setSuccess(null);
 
     const trimmedPhoneDigits = phone.replace(/\D/g, '');
-    const fullPhone = phone ? `${selectedCountry.dialCode}${trimmedPhoneDigits}` : undefined;
+    const fullPhone = `${selectedCountry.dialCode}${trimmedPhoneDigits}`;
 
     try {
       const response = await authService.registerStaff({
-        companyCode: companyCode.trim(),
+        companyCode: selectedCompanyCode,
         employeeId: employeeId.trim(),
         name: name.trim(),
         email: email.trim().toLowerCase(),
@@ -155,6 +185,7 @@ const StaffRegisterPage = () => {
         name: response.name,
         status: response.status,
         adminName: response.admin?.name || null,
+        adminRole: response.admin?.role || null,
       });
     } catch (err: any) {
       setError(err.message || 'Registration failed');
@@ -165,9 +196,9 @@ const StaffRegisterPage = () => {
 
   if (success && registeredData) {
     return (
-      <div className="login-container">
+      <div className="login-container registration-page">
         <div className="login-card">
-          <h1>Staff Tracker Geo</h1>
+          <h1>Staff Attendance</h1>
           <h2>Staff Registration</h2>
 
           <div className="registration-success">
@@ -178,15 +209,18 @@ const StaffRegisterPage = () => {
             {registeredData.adminName ? (
               <>
                 <p className="registration-success-text">
-                  Your registration is pending approval from
+                  Your registration request has been sent to:
                 </p>
                 <p className="registration-success-admin">
                   {registeredData.adminName}
                 </p>
+                <p className="registration-success-admin-role">
+                  Master Admin
+                </p>
               </>
             ) : (
               <p className="registration-success-text">
-                Your registration is pending Admin approval.
+                Your registration request is pending Master Admin approval.
               </p>
             )}
 
@@ -206,9 +240,9 @@ const StaffRegisterPage = () => {
   }
 
   return (
-    <div className="login-container">
+    <div className="login-container registration-page">
       <div className="login-card">
-        <h1>Staff Tracker Geo</h1>
+        <h1>Staff Attendance</h1>
         <h2>Staff Registration</h2>
 
         {error && (
@@ -220,15 +254,18 @@ const StaffRegisterPage = () => {
 
         <form onSubmit={handleSubmit}>
           <div className="form-group">
-            <label htmlFor="companyCode">Company ID / Company Code</label>
-            <input
-              type="text"
-              id="companyCode"
-              value={companyCode}
-              onChange={(e) => setCompanyCode(e.target.value)}
+            <label htmlFor="companyId">ILKKM ID</label>
+            <CompanyDropdown
+              companies={companies}
+              selectedCompanyId={selectedCompanyId}
+              onSelect={(id, code) => {
+                setSelectedCompanyId(id);
+                setSelectedCompanyCode(code);
+                setDepartmentId('');
+              }}
               disabled={loading}
-              placeholder="Enter company ID"
-              required
+              loading={companiesLoading}
+              emptyMessage="No companies available for registration"
             />
           </div>
 
@@ -291,9 +328,10 @@ const StaffRegisterPage = () => {
                 value={phone}
                 onChange={(e) => handlePhoneChange(e.target.value)}
                 disabled={loading}
-                placeholder="Phone number (optional)"
+                placeholder="Enter phone number"
                 className="phone-number-input"
                 maxLength={getPhoneMaxLength(selectedCountry.code)}
+                required
               />
             </div>
           </div>
@@ -311,7 +349,7 @@ const StaffRegisterPage = () => {
                 {departmentsLoading
                   ? 'Loading departments...'
                   : !companyFound
-                  ? 'Enter a valid company code first'
+                  ? 'Select a company first'
                   : departments.length === 0
                   ? 'No active departments found for this company'
                   : 'Select department'}

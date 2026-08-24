@@ -3,6 +3,7 @@ import { Router } from "express";
 import {
   clockIn,
   clockOut,
+  exportAttendanceHistory,
   getAttendanceHistory,
   getAttendanceSummary,
   getCurrentSession,
@@ -22,6 +23,11 @@ router.get(
 router.get(
   "/history",
   getAttendanceHistory
+);
+
+router.get(
+  "/history/export",
+  exportAttendanceHistory
 );
 
 router.get(
