@@ -38,7 +38,6 @@ const MasterAdminAdmins = ({ admins, departments, onSuccess, onDepartmentCreated
   const [phone, setPhone] = useState('');
   const [selectedCountry, setSelectedCountry] = useState<Country>(countries.find(c => c.code === 'MY') || countries[0]);
   const [password, setPassword] = useState('');
-  const [departmentId, setDepartmentId] = useState('');
   const [designation, setDesignation] = useState('');
   const [newDeptName, setNewDeptName] = useState('');
   const [newDeptCode, setNewDeptCode] = useState('');
@@ -52,6 +51,8 @@ const MasterAdminAdmins = ({ admins, departments, onSuccess, onDepartmentCreated
   const [emailError, setEmailError] = useState('');
   const [phoneError, setPhoneError] = useState('');
   const [passwordError, setPasswordError] = useState('');
+  const [deptNameError, setDeptNameError] = useState('');
+  const [deptCodeError, setDeptCodeError] = useState('');
 
   const validateForm = (): boolean => {
     let isValid = true;
@@ -59,10 +60,10 @@ const MasterAdminAdmins = ({ admins, departments, onSuccess, onDepartmentCreated
     // Validate Employee ID
     const trimmedEmployeeId = employeeId.trim();
     if (!trimmedEmployeeId) {
-      setEmployeeIdError('Employee ID is required');
+      setEmployeeIdError('Admin ID is required');
       isValid = false;
     } else if (!validateEmployeeId(trimmedEmployeeId)) {
-      setEmployeeIdError('Enter a valid Employee ID');
+      setEmployeeIdError('Enter a valid Admin ID');
       isValid = false;
     } else {
       setEmployeeIdError('');
@@ -111,6 +112,27 @@ const MasterAdminAdmins = ({ admins, departments, onSuccess, onDepartmentCreated
       setPasswordError('');
     }
 
+    // Validate Department Name
+    const trimmedDeptName = newDeptName.trim();
+    if (!trimmedDeptName) {
+      setDeptNameError('Department name is required');
+      isValid = false;
+    } else if (trimmedDeptName.length < 2) {
+      setDeptNameError('Department name must be at least 2 characters');
+      isValid = false;
+    } else {
+      setDeptNameError('');
+    }
+
+    // Validate Department Code
+    const trimmedDeptCode = newDeptCode.trim();
+    if (!trimmedDeptCode) {
+      setDeptCodeError('Department code is required');
+      isValid = false;
+    } else {
+      setDeptCodeError('');
+    }
+
     return isValid;
   };
 
@@ -125,15 +147,6 @@ const MasterAdminAdmins = ({ admins, departments, onSuccess, onDepartmentCreated
 
     const trimmedDeptName = newDeptName.trim();
     const trimmedDeptCode = newDeptCode.trim();
-
-    if (!trimmedDeptName || trimmedDeptName.length < 2) {
-      setError('Department name must be at least 2 characters');
-      return;
-    }
-    if (!trimmedDeptCode) {
-      setError('Department code is required');
-      return;
-    }
 
     const trimmedEmployeeId = employeeId.trim();
     const trimmedName = name.trim();
@@ -153,9 +166,6 @@ const MasterAdminAdmins = ({ admins, departments, onSuccess, onDepartmentCreated
         const deptResponse = await masterAdminService.createDepartment(trimmedDeptName, trimmedDeptCode);
         if (deptResponse.success && deptResponse.data?.id) {
           deptId = deptResponse.data.id;
-          if (deptId) {
-            setDepartmentId(deptId);
-          }
           onDepartmentCreated();
         }
       } catch (deptErr: any) {
@@ -167,7 +177,6 @@ const MasterAdminAdmins = ({ admins, departments, onSuccess, onDepartmentCreated
           );
           if (existingDept) {
             deptId = existingDept.id;
-            setDepartmentId(existingDept.id);
           } else {
             // Department exists but not in our list, reload and try again
             onDepartmentCreated();
@@ -200,7 +209,6 @@ const MasterAdminAdmins = ({ admins, departments, onSuccess, onDepartmentCreated
         setEmail('');
         setPhone('');
         setPassword('');
-        setDepartmentId('');
         setDesignation('');
         setNewDeptName('');
         setNewDeptCode('');
@@ -209,6 +217,8 @@ const MasterAdminAdmins = ({ admins, departments, onSuccess, onDepartmentCreated
         setEmailError('');
         setPhoneError('');
         setPasswordError('');
+        setDeptNameError('');
+        setDeptCodeError('');
         onSuccess();
       }
     } catch (err: any) {
@@ -328,31 +338,25 @@ const MasterAdminAdmins = ({ admins, departments, onSuccess, onDepartmentCreated
 
       <form onSubmit={handleSubmit} className="add-form">
         <div className="form-group">
-          <label htmlFor="adminEmployeeId">ILKKM ID</label>
+          <label htmlFor="adminCompanyCode">ILKKM ID</label>
           <input
             type="text"
-            id="adminEmployeeId"
-            value={employeeId}
-            onChange={(e) => handleEmployeeIdChange(e.target.value)}
-            disabled={loading}
-            placeholder="Enter ILKKM ID"
-            required
+            id="adminCompanyCode"
+            value={currentUser?.companyCode || ''}
+            disabled
+            readOnly
           />
-          {employeeIdError && <div className="field-error">{employeeIdError}</div>}
         </div>
 
         <div className="form-group">
-          <label htmlFor="adminName">ILKKM Name</label>
+          <label htmlFor="adminCompanyName">ILKKM Name</label>
           <input
             type="text"
-            id="adminName"
-            value={name}
-            onChange={(e) => handleNameChange(e.target.value)}
-            disabled={loading}
-            placeholder="Enter ILKKM name"
-            required
+            id="adminCompanyName"
+            value={currentUser?.companyName || ''}
+            disabled
+            readOnly
           />
-          {nameError && <div className="field-error">{nameError}</div>}
         </div>
 
         <div className="form-group">
@@ -413,40 +417,31 @@ const MasterAdminAdmins = ({ admins, departments, onSuccess, onDepartmentCreated
         </div>
 
         <div className="form-group">
-          <label htmlFor="adminCompanyCode">ILKKM ID</label>
+          <label htmlFor="adminEmployeeId">Admin ID</label>
           <input
             type="text"
-            id="adminCompanyCode"
-            value={currentUser?.companyCode || ''}
-            disabled
-            readOnly
+            id="adminEmployeeId"
+            value={employeeId}
+            onChange={(e) => handleEmployeeIdChange(e.target.value)}
+            disabled={loading}
+            placeholder="Enter Admin ID"
+            required
           />
+          {employeeIdError && <div className="field-error">{employeeIdError}</div>}
         </div>
 
         <div className="form-group">
-          <label htmlFor="newDeptName">Department Name</label>
+          <label htmlFor="adminName">Admin Name</label>
           <input
             type="text"
-            id="newDeptName"
-            value={newDeptName}
-            onChange={(e) => setNewDeptName(e.target.value)}
+            id="adminName"
+            value={name}
+            onChange={(e) => handleNameChange(e.target.value)}
             disabled={loading}
-            placeholder="Enter department name"
+            placeholder="Enter Admin Name"
             required
           />
-        </div>
-
-        <div className="form-group">
-          <label htmlFor="newDeptCode">Department Code</label>
-          <input
-            type="text"
-            id="newDeptCode"
-            value={newDeptCode}
-            onChange={(e) => setNewDeptCode(e.target.value)}
-            disabled={loading}
-            placeholder="Enter department code"
-            required
-          />
+          {nameError && <div className="field-error">{nameError}</div>}
         </div>
 
         <div className="form-group">
@@ -461,7 +456,41 @@ const MasterAdminAdmins = ({ admins, departments, onSuccess, onDepartmentCreated
           />
         </div>
 
-        <button type="submit" disabled={loading || !departmentId} className="submit-button">
+        <div className="form-group">
+          <label htmlFor="newDeptName">Department Name</label>
+          <input
+            type="text"
+            id="newDeptName"
+            value={newDeptName}
+            onChange={(e) => {
+              setNewDeptName(e.target.value);
+              if (e.target.value.trim().length >= 2) setDeptNameError('');
+            }}
+            disabled={loading}
+            placeholder="Enter department name"
+            required
+          />
+          {deptNameError && <div className="field-error">{deptNameError}</div>}
+        </div>
+
+        <div className="form-group">
+          <label htmlFor="newDeptCode">Department Code</label>
+          <input
+            type="text"
+            id="newDeptCode"
+            value={newDeptCode}
+            onChange={(e) => {
+              setNewDeptCode(e.target.value);
+              if (e.target.value.trim()) setDeptCodeError('');
+            }}
+            disabled={loading}
+            placeholder="Enter department code"
+            required
+          />
+          {deptCodeError && <div className="field-error">{deptCodeError}</div>}
+        </div>
+
+        <button type="submit" disabled={loading} className="submit-button">
           {loading ? 'Creating...' : 'Add Admin'}
         </button>
       </form>
@@ -473,8 +502,8 @@ const MasterAdminAdmins = ({ admins, departments, onSuccess, onDepartmentCreated
           <table className="staff-table">
             <thead>
               <tr>
-                <th>ILKKM ID</th>
-                <th>ILKKM Name</th>
+                <th>Admin ID</th>
+                <th>Admin Name</th>
                 <th>ILKKM Email</th>
                 <th>Phone</th>
                 <th>Department</th>

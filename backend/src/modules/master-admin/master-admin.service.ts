@@ -101,7 +101,7 @@ export async function createAdmin(
     .limit(1);
 
   if (existingEmployee) {
-    throw new AppError(409, "Employee ID already exists in this company");
+    throw new AppError(409, "Admin ID already exists in this ILKKM.");
   }
 
   const passwordHash = await hashPassword(input.password);
@@ -143,14 +143,14 @@ export async function createAdmin(
         '';
 
       if (constraint.includes('users_company_employee_unique')) {
-        throw new AppError(409, "Employee ID already exists in this company");
+        throw new AppError(409, "Admin ID already exists in this ILKKM.");
       }
 
       if (constraint.includes('users_email_unique')) {
         throw new AppError(409, "Email already registered");
       }
 
-      throw new AppError(409, "Email or Employee ID already exists");
+      throw new AppError(409, "Email or Admin ID already exists");
     }
 
     throw error;
