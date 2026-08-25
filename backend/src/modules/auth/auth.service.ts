@@ -201,6 +201,8 @@ export async function registerStaff(input: RegisterInput) {
 }
 
 export async function login(input: LoginInput) {
+  console.log("LOGIN REQUEST:", input.email);
+
   const [user] = await db
     .select({
       id: users.id,
@@ -224,6 +226,8 @@ export async function login(input: LoginInput) {
     .where(eq(users.email, input.email))
     .limit(1);
 
+  console.log("USER FOUND:", user ? { id: user.id, email: user.email, role: user.role, status: user.status } : null);
+
   if (!user) {
     throw new AppError(401, "Invalid email or password");
   }
@@ -233,7 +237,7 @@ export async function login(input: LoginInput) {
     user.passwordHash
   );
 
-  console.log("Password check:", passwordMatches, "for email:", input.email);
+  console.log("PASSWORD MATCH:", passwordMatches);
 
   if (!passwordMatches) {
     throw new AppError(401, "Invalid email or password");
