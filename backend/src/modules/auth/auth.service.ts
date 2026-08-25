@@ -233,6 +233,8 @@ export async function login(input: LoginInput) {
     user.passwordHash
   );
 
+  console.log("Password check:", passwordMatches, "for email:", input.email);
+
   if (!passwordMatches) {
     throw new AppError(401, "Invalid email or password");
   }
