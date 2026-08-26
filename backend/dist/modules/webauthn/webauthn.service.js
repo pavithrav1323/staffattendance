@@ -4,6 +4,7 @@ import { users } from "../../db/schema/users.js";
 import { webauthnCredentials } from "../../db/schema/webauthn-credentials.js";
 import { AppError } from "../../utils/app-error.js";
 import { env } from "../../config/env.js";
+import { logger } from "../../utils/logger.js";
 import { generateAuthenticationOptions, generateRegistrationOptions, verifyAuthenticationResponse, verifyRegistrationResponse, } from "@simplewebauthn/server";
 const CHALLENGE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 const challengeStore = new Map();
@@ -72,17 +73,7 @@ export async function generateRegistrationOptionsService(_authUser, userId) {
             ? authenticatorSelection
             : undefined,
     });
-    console.log('[WEBAUTHN][BACKEND] register options:', {
-        rp: { id: env.rpId, name: env.rpName },
-        origin: env.rpOrigin,
-        user: { name: user.email, idType: typeof user.id, idLength: user.id.length },
-        challenge: options.challenge,
-        timeout: options.timeout,
-        attestation: options.attestation,
-        authenticatorSelection: options.authenticatorSelection,
-        excludeCredentialsCount: options.excludeCredentials?.length ?? 0,
-        pubKeyCredParams: options.pubKeyCredParams,
-    });
+    logger.debug('[WEBAUTHN] Generated register options');
     setChallenge(userId, options.challenge);
     return { options };
 }

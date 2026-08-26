@@ -3,6 +3,7 @@ import {
   uuid,
   varchar,
   boolean,
+  integer,
   timestamp,
   unique,
 } from "drizzle-orm/pg-core";
@@ -76,6 +77,12 @@ export const users = pgTable(
     }),
 
     deviceResetUsed: boolean("device_reset_used").default(false),
+
+    failedLoginAttempts: integer("failed_login_attempts")
+      .notNull()
+      .default(0),
+
+    lockedUntil: timestamp("locked_until", { withTimezone: true }),
   },
   (table) => [
     unique("users_company_employee_unique").on(

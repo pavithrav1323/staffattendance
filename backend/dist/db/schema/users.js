@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, boolean, timestamp, unique, } from "drizzle-orm/pg-core";
+import { pgTable, uuid, varchar, boolean, integer, timestamp, unique, } from "drizzle-orm/pg-core";
 import { companies } from "./companies.js";
 import { departments } from "./departments.js";
 import { workLocations } from "./work-locations.js";
@@ -45,6 +45,10 @@ export const users = pgTable("users", {
         withTimezone: true,
     }),
     deviceResetUsed: boolean("device_reset_used").default(false),
+    failedLoginAttempts: integer("failed_login_attempts")
+        .notNull()
+        .default(0),
+    lockedUntil: timestamp("locked_until", { withTimezone: true }),
 }, (table) => [
     unique("users_company_employee_unique").on(table.companyId, table.employeeId),
 ]);

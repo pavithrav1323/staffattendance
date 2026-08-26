@@ -24,6 +24,7 @@ export const loginSchema = z.object({
   email: z.string().trim().email(),
   password: z.string().min(1),
   deviceToken: z.string().trim().min(32).optional(),
+  deviceResetToken: z.string().trim().optional(),
 });
 
 export const refreshSchema = z.object({
