@@ -103,7 +103,7 @@ const ProgramOwnerMasterAdmins = () => {
       setPasswordError('Password is required');
       isValid = false;
     } else if (!validatePassword(password)) {
-      setPasswordError('Password must contain uppercase, lowercase, number, and special character');
+      setPasswordError('Password must contain at least 7 characters with uppercase, lowercase, number and special character.');
       isValid = false;
     } else {
       setPasswordError('');

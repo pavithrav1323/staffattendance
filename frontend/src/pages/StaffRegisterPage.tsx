@@ -141,7 +141,7 @@ const StaffRegisterPage = () => {
       message = 'Password is required';
       isValid = false;
     } else if (!validatePassword(password)) {
-      message = 'Password must contain uppercase, lowercase, number, and special character';
+      message = 'Password must contain at least 7 characters with uppercase, lowercase, number and special character.';
       isValid = false;
     } else if (!departmentId) {
       message = 'Department is required';
@@ -206,23 +206,16 @@ const StaffRegisterPage = () => {
               Registration Submitted Successfully
             </p>
 
-            {registeredData.adminName ? (
-              <>
-                <p className="registration-success-text">
-                  Your registration request has been sent to:
-                </p>
-                <p className="registration-success-admin">
-                  {registeredData.adminName}
-                </p>
-                <p className="registration-success-admin-role">
-                  Master Admin
-                </p>
-              </>
-            ) : (
-              <p className="registration-success-text">
-                Your registration request is pending Master Admin approval.
+            <p className="registration-success-text">
+              Your registration request is pending Master Admin approval.
+            </p>
+
+            <div className="registration-success-admin-block">
+              <p className="registration-success-admin-label">Master Admin:</p>
+              <p className="registration-success-admin">
+                {registeredData.adminName || 'Pending Assignment'}
               </p>
-            )}
+            </div>
 
             <div className="registration-success-status">
               <span className="status-label">Status</span>

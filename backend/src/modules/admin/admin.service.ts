@@ -1,4 +1,5 @@
 import { and, desc, eq, gte, lte, sql } from "drizzle-orm";
+import { randomBytes } from "crypto";
 import { db } from "../../db/connection.js";
 import { attendance } from "../../db/schema/attendance.js";
 import { companies } from "../../db/schema/companies.js";
@@ -60,7 +61,8 @@ export async function getPendingStaff(authUser: AuthUser) {
       and(
         eq(users.companyId, authUser.companyId),
         eq(users.role, "STAFF"),
-        eq(users.status, "PENDING")
+        eq(users.status, "PENDING"),
+        eq(users.isDeleted, false)
       )
     );
 }
@@ -94,7 +96,8 @@ export async function getStaffList(
           eq(users.companyId, authUser.companyId),
           eq(users.departmentId, authUser.departmentId),
           eq(users.role, "STAFF"),
-          eq(users.status, "APPROVED")
+          eq(users.status, "APPROVED"),
+          eq(users.isDeleted, false)
         )
       );
   }
@@ -115,7 +118,8 @@ export async function getStaffList(
       .where(
         and(
           eq(users.companyId, authUser.companyId),
-          eq(users.role, "STAFF")
+          eq(users.role, "STAFF"),
+          eq(users.isDeleted, false)
         )
       );
   }
@@ -157,7 +161,8 @@ export async function getApprovedStaff(
       and(
         eq(users.companyId, authUser.companyId),
         eq(users.role, "STAFF"),
-        eq(users.status, "APPROVED")
+        eq(users.status, "APPROVED"),
+        eq(users.isDeleted, false)
       )
     );
 }
@@ -178,13 +183,15 @@ export async function getAdminAttendance(
     throw new AppError(403, "Company context is required");
   }
 
-  if (authUser.role !== "ADMIN") {
+  if (authUser.role !== "ADMIN" && authUser.role !== "MASTER_ADMIN") {
     throw new AppError(403, "Access denied");
   }
 
-  if (!authUser.departmentId) {
+  if (authUser.role === "ADMIN" && !authUser.departmentId) {
     throw new AppError(403, "Department context is required");
   }
+
+  const adminDepartmentId = authUser.departmentId;
 
   // Pagination validation
   const currentPage = page ?? 1;
@@ -217,19 +224,24 @@ export async function getAdminAttendance(
   let employeeUuid: string | undefined;
 
   if (employeeId) {
+    const employeeConditions = [
+      eq(users.employeeId, employeeId),
+      eq(users.companyId, authUser.companyId),
+      eq(users.role, "STAFF"),
+    ];
+
+    if (adminDepartmentId) {
+      employeeConditions.push(
+        eq(users.departmentId, adminDepartmentId)
+      );
+    }
+
     const [staff] = await db
       .select({
         id: users.id,
       })
       .from(users)
-      .where(
-        and(
-          eq(users.employeeId, employeeId),
-          eq(users.companyId, authUser.companyId),
-          eq(users.departmentId, authUser.departmentId),
-          eq(users.role, "STAFF")
-        )
-      )
+      .where(and(...employeeConditions))
       .limit(1);
 
     if (!staff) {
@@ -244,10 +256,15 @@ export async function getAdminAttendance(
 
   const conditions = [
     eq(attendance.companyId, authUser.companyId),
-    eq(attendance.departmentId, authUser.departmentId),
     gte(attendance.attendanceDate, dateStart),
     lte(attendance.attendanceDate, dateEnd),
   ];
+
+  if (adminDepartmentId) {
+    conditions.push(
+      eq(attendance.departmentId, adminDepartmentId)
+    );
+  }
 
   if (employeeUuid) {
     conditions.push(
@@ -288,9 +305,10 @@ export async function getAdminAttendance(
       workingMinutes: attendance.workingMinutes,
       attendanceStatus: attendance.attendanceStatus,
       sessionStatus: attendance.sessionStatus,
+      isDeleted: attendance.isDeleted,
     })
     .from(attendance)
-    .innerJoin(
+    .leftJoin(
       users,
       eq(attendance.employeeId, users.id)
     )
@@ -330,13 +348,15 @@ export async function getAdminAttendanceExport(
     throw new AppError(403, "Company context is required");
   }
 
-  if (authUser.role !== "ADMIN") {
+  if (authUser.role !== "ADMIN" && authUser.role !== "MASTER_ADMIN") {
     throw new AppError(403, "Access denied");
   }
 
-  if (!authUser.departmentId) {
+  if (authUser.role === "ADMIN" && !authUser.departmentId) {
     throw new AppError(403, "Department context is required");
   }
+
+  const adminDepartmentId = authUser.departmentId;
 
   // Use browser timezone from request, fall back to company timezone
   const [company] = await db
@@ -362,19 +382,24 @@ export async function getAdminAttendanceExport(
   let employeeUuid: string | undefined;
 
   if (employeeId) {
+    const employeeConditions = [
+      eq(users.employeeId, employeeId),
+      eq(users.companyId, authUser.companyId),
+      eq(users.role, "STAFF"),
+    ];
+
+    if (adminDepartmentId) {
+      employeeConditions.push(
+        eq(users.departmentId, adminDepartmentId)
+      );
+    }
+
     const [staff] = await db
       .select({
         id: users.id,
       })
       .from(users)
-      .where(
-        and(
-          eq(users.employeeId, employeeId),
-          eq(users.companyId, authUser.companyId),
-          eq(users.departmentId, authUser.departmentId),
-          eq(users.role, "STAFF")
-        )
-      )
+      .where(and(...employeeConditions))
       .limit(1);
 
     if (!staff) {
@@ -389,10 +414,15 @@ export async function getAdminAttendanceExport(
 
   const conditions = [
     eq(attendance.companyId, authUser.companyId),
-    eq(attendance.departmentId, authUser.departmentId),
     gte(attendance.attendanceDate, dateStart),
     lte(attendance.attendanceDate, dateEnd),
   ];
+
+  if (adminDepartmentId) {
+    conditions.push(
+      eq(attendance.departmentId, adminDepartmentId)
+    );
+  }
 
   if (employeeUuid) {
     conditions.push(
@@ -663,6 +693,165 @@ export async function getAdminAttendanceSummary(
   };
 }
 
+export async function getAdminDashboardStats(
+  authUser: AuthUser
+) {
+  if (!authUser.companyId) {
+    throw new AppError(403, "Company context is required");
+  }
+
+  // Build shared base conditions
+  const staffConditions = [
+    eq(users.companyId, authUser.companyId),
+    eq(users.role, "STAFF"),
+    eq(users.isDeleted, false),
+  ];
+
+  const pendingStaffConditions = [
+    eq(users.companyId, authUser.companyId),
+    eq(users.role, "STAFF"),
+    eq(users.status, "PENDING"),
+    eq(users.isDeleted, false),
+  ];
+
+  if (authUser.role === "ADMIN") {
+    if (!authUser.departmentId) {
+      throw new AppError(403, "Department context is required");
+    }
+    staffConditions.push(eq(users.departmentId, authUser.departmentId));
+    pendingStaffConditions.push(eq(users.departmentId, authUser.departmentId));
+  }
+
+  const [company] = await db
+    .select({
+      timezone: companies.timezone,
+    })
+    .from(companies)
+    .where(eq(companies.id, authUser.companyId))
+    .limit(1);
+
+  if (!company?.timezone) {
+    throw new AppError(500, "Company timezone not configured");
+  }
+
+  const currentDate = getDateInTimeZone(company.timezone);
+
+  const attendanceConditions = [
+    eq(attendance.companyId, authUser.companyId),
+    eq(attendance.attendanceDate, currentDate),
+  ];
+
+  if (authUser.role === "ADMIN") {
+    attendanceConditions.push(
+      eq(attendance.departmentId, authUser.departmentId!)
+    );
+  }
+
+  const [staffCountResult] = await db
+    .select({
+      count: sql<number>`count(*)`,
+    })
+    .from(users)
+    .where(and(...staffConditions));
+
+  const [pendingStaffCountResult] = await db
+    .select({
+      count: sql<number>`count(*)`,
+    })
+    .from(users)
+    .where(and(...pendingStaffConditions));
+
+  const [attendanceSummary] = await db
+    .select({
+      presentRecords: sql<number>`
+        count(*) filter (where ${attendance.attendanceStatus} = 'PRESENT')
+      `,
+    })
+    .from(attendance)
+    .where(and(...attendanceConditions));
+
+  return {
+    totalStaff: Number(staffCountResult?.count ?? 0),
+    pendingStaff: Number(pendingStaffCountResult?.count ?? 0),
+    presentRecords: Number(attendanceSummary?.presentRecords ?? 0),
+    presentDate: currentDate,
+  };
+}
+
+export async function getMasterAdminDashboardStats(
+  authUser: AuthUser
+) {
+  if (!authUser.companyId) {
+    throw new AppError(403, "Company context is required");
+  }
+
+  if (authUser.role !== "MASTER_ADMIN") {
+    throw new AppError(403, "Only Master Admin can view dashboard stats");
+  }
+
+  const [totalStaffResult] = await db
+    .select({
+      count: sql<number>`count(*)`,
+    })
+    .from(users)
+    .where(
+      and(
+        eq(users.companyId, authUser.companyId),
+        eq(users.role, "STAFF"),
+        eq(users.isDeleted, false)
+      )
+    );
+
+  const [pendingStaffResult] = await db
+    .select({
+      count: sql<number>`count(*)`,
+    })
+    .from(users)
+    .where(
+      and(
+        eq(users.companyId, authUser.companyId),
+        eq(users.role, "STAFF"),
+        eq(users.status, "PENDING"),
+        eq(users.isDeleted, false)
+      )
+    );
+
+  const [approvedStaffResult] = await db
+    .select({
+      count: sql<number>`count(*)`,
+    })
+    .from(users)
+    .where(
+      and(
+        eq(users.companyId, authUser.companyId),
+        eq(users.role, "STAFF"),
+        eq(users.status, "APPROVED"),
+        eq(users.isDeleted, false)
+      )
+    );
+
+  const [rejectedStaffResult] = await db
+    .select({
+      count: sql<number>`count(*)`,
+    })
+    .from(users)
+    .where(
+      and(
+        eq(users.companyId, authUser.companyId),
+        eq(users.role, "STAFF"),
+        eq(users.status, "REJECTED"),
+        eq(users.isDeleted, false)
+      )
+    );
+
+  return {
+    totalRegistered: Number(totalStaffResult?.count ?? 0),
+    pendingApproval: Number(pendingStaffResult?.count ?? 0),
+    approved: Number(approvedStaffResult?.count ?? 0),
+    rejected: Number(rejectedStaffResult?.count ?? 0),
+  };
+}
+
 export async function approveStaff(
   authUser: AuthUser,
   staffId: string
@@ -805,7 +994,7 @@ export async function resetStaffDevice(
   }
 
   const [staff] = await db
-    .select({ id: users.id })
+    .select({ id: users.id, employeeId: users.employeeId })
     .from(users)
     .where(and(...conditions))
     .limit(1);
@@ -814,6 +1003,7 @@ export async function resetStaffDevice(
     throw new AppError(404, "Staff member not found");
   }
 
+  // Revoke all active staff devices for this user
   await db
     .update(staffDevices)
     .set({
@@ -827,30 +1017,70 @@ export async function resetStaffDevice(
       )
     );
 
-  const [pendingDevice] = await db
-    .select({ id: staffDevices.id })
-    .from(staffDevices)
+  const now = new Date();
+  const expiry = new Date(now.getTime() + 5 * 60 * 1000);
+
+  // Check if an unused, non-expired reset token already exists for this staff
+  const [existingUser] = await db
+    .select({
+      deviceResetToken: users.deviceResetToken,
+      deviceResetUsed: users.deviceResetUsed,
+      deviceResetExpiry: users.deviceResetExpiry,
+    })
+    .from(users)
     .where(
       and(
-        eq(staffDevices.userId, staffId),
-        eq(staffDevices.status, "PENDING")
+        eq(users.id, staffId),
+        eq(users.deviceResetUsed, false),
+        gte(users.deviceResetExpiry, now)
       )
     )
-    .orderBy(desc(staffDevices.createdAt))
     .limit(1);
 
-  if (pendingDevice) {
+  if (existingUser && existingUser.deviceResetToken) {
     await db
-      .update(staffDevices)
+      .update(users)
       .set({
-        status: "ACTIVE",
-        approvedAt: new Date(),
-        revokedAt: null,
+        deviceResetExpiry: expiry,
+        deviceResetRequestedAt: now,
+        updatedAt: now,
       })
-      .where(eq(staffDevices.id, pendingDevice.id));
+      .where(eq(users.id, staffId));
+
+    return {
+      success: true,
+      message: "Device access already allowed and timer refreshed.",
+      data: {
+        resetToken: existingUser.deviceResetToken,
+        employeeId: staff.employeeId,
+        expiresAt: expiry,
+      },
+    };
   }
 
-  return { success: true, message: "Registered device reset successfully" };
+  // Generate a unique one-time reset token valid for 5 minutes
+  const resetToken = randomBytes(32).toString("hex");
+
+  await db
+    .update(users)
+    .set({
+      deviceResetToken: resetToken,
+      deviceResetRequestedAt: now,
+      deviceResetExpiry: expiry,
+      deviceResetUsed: false,
+      updatedAt: now,
+    })
+    .where(eq(users.id, staffId));
+
+  return {
+    success: true,
+    message: "Device reset enabled for 5 minutes",
+    data: {
+      resetToken,
+      employeeId: staff.employeeId,
+      expiresAt: expiry,
+    },
+  };
 }
 
 async function updateExistingStaffStatus(
@@ -911,6 +1141,7 @@ export async function deleteStaff(
     eq(users.id, staffId),
     eq(users.companyId, authUser.companyId),
     eq(users.role, "STAFF"),
+    eq(users.isDeleted, false),
   ];
 
   if (authUser.role === "ADMIN") {
@@ -923,34 +1154,43 @@ export async function deleteStaff(
     );
   }
 
-  try {
-    const [deletedUser] = await db
-      .delete(users)
-      .where(and(...conditions))
-      .returning({
-        id: users.id,
-        employeeId: users.employeeId,
-        name: users.name,
-      });
+  // Soft-delete the staff user
+  const [deletedUser] = await db
+    .update(users)
+    .set({
+      isDeleted: true,
+      deletedAt: new Date(),
+      status: "DISABLED",
+      updatedAt: new Date(),
+    })
+    .where(and(...conditions))
+    .returning({
+      id: users.id,
+      employeeId: users.employeeId,
+      name: users.name,
+    });
 
-    if (!deletedUser) {
-      throw new AppError(404, "Staff member not found");
-    }
-
-    return { success: true };
-  } catch (error: any) {
-    if (
-      error?.code === '23503' ||
-      error?.cause?.code === '23503'
-    ) {
-      throw new AppError(
-        409,
-        "This staff member cannot be deleted because attendance records exist"
-      );
-    }
-
-    throw error;
+  if (!deletedUser) {
+    throw new AppError(404, "Staff member not found");
   }
+
+  // Bulk soft-delete all attendance records for this staff member
+  await db
+    .update(attendance)
+    .set({
+      isDeleted: true,
+      deletedAt: new Date(),
+      deletedBy: authUser.userId,
+      updatedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(attendance.employeeId, staffId),
+        eq(attendance.isDeleted, false)
+      )
+    );
+
+  return { success: true };
 }
 
 export async function resetStaffPassword(
@@ -1007,6 +1247,189 @@ export async function resetStaffPassword(
       updatedAt: new Date(),
     })
     .where(eq(users.id, staff.id));
+
+  return { success: true };
+}
+
+export async function getDeletedStaff(
+  authUser: AuthUser
+) {
+  if (!authUser.companyId) {
+    throw new AppError(403, "Company context is required");
+  }
+
+  const conditions = [
+    eq(users.companyId, authUser.companyId),
+    eq(users.role, "STAFF"),
+    eq(users.isDeleted, true),
+  ];
+
+  if (authUser.role === "ADMIN") {
+    if (!authUser.departmentId) {
+      throw new AppError(403, "Department context is required");
+    }
+
+    conditions.push(
+      eq(users.departmentId, authUser.departmentId)
+    );
+  }
+
+  return db
+    .select({
+      id: users.id,
+      employeeId: users.employeeId,
+      name: users.name,
+    })
+    .from(users)
+    .where(and(...conditions))
+    .orderBy(users.name);
+}
+
+export async function getDeletedStaffAttendance(
+  authUser: AuthUser,
+  employeeId: string
+) {
+  if (!authUser.companyId) {
+    throw new AppError(403, "Company context is required");
+  }
+
+  // Find the deleted staff user by employeeId
+  const userConditions = [
+    eq(users.companyId, authUser.companyId),
+    eq(users.role, "STAFF"),
+    eq(users.isDeleted, true),
+    eq(users.employeeId, employeeId),
+  ];
+
+  if (authUser.role === "ADMIN") {
+    if (!authUser.departmentId) {
+      throw new AppError(403, "Department context is required");
+    }
+
+    userConditions.push(
+      eq(users.departmentId, authUser.departmentId)
+    );
+  }
+
+  const [staffUser] = await db
+    .select({
+      id: users.id,
+      employeeId: users.employeeId,
+      name: users.name,
+    })
+    .from(users)
+    .where(and(...userConditions))
+    .limit(1);
+
+  if (!staffUser) {
+    throw new AppError(404, "Deleted staff member not found");
+  }
+
+  const attendanceConditions = [
+    eq(attendance.companyId, authUser.companyId),
+    eq(attendance.employeeId, staffUser.id),
+    eq(attendance.isDeleted, true),
+  ];
+
+  if (authUser.role === "ADMIN") {
+    attendanceConditions.push(
+      eq(attendance.departmentId, authUser.departmentId!)
+    );
+  }
+
+  const records = await db
+    .select({
+      id: attendance.id,
+      employeeId: users.employeeId,
+      employeeName: users.name,
+      departmentId: attendance.departmentId,
+      attendanceDate: attendance.attendanceDate,
+      clockInTime: attendance.clockInTime,
+      clockInLatitude: attendance.clockInLatitude,
+      clockInLongitude: attendance.clockInLongitude,
+      clockInLocationName: attendance.clockInLocationName,
+      clockInMethod: attendance.clockInMethod,
+      assignedTask: attendance.assignedTask,
+      clockOutTime: attendance.clockOutTime,
+      clockOutLatitude: attendance.clockOutLatitude,
+      clockOutLongitude: attendance.clockOutLongitude,
+      clockOutLocationName: attendance.clockOutLocationName,
+      clockOutMethod: attendance.clockOutMethod,
+      workingMinutes: attendance.workingMinutes,
+      attendanceStatus: attendance.attendanceStatus,
+      sessionStatus: attendance.sessionStatus,
+      isDeleted: attendance.isDeleted,
+    })
+    .from(attendance)
+    .leftJoin(
+      users,
+      eq(attendance.employeeId, users.id)
+    )
+    .where(and(...attendanceConditions))
+    .orderBy(
+      desc(attendance.attendanceDate),
+      desc(attendance.clockInTime)
+    );
+
+  return {
+    staff: staffUser,
+    records,
+  };
+}
+
+export async function deleteDeletedStaffAttendance(
+  authUser: AuthUser,
+  employeeId: string
+) {
+  if (!authUser.companyId) {
+    throw new AppError(403, "Company context is required");
+  }
+
+  // Find the deleted staff user by employeeId
+  const userConditions = [
+    eq(users.companyId, authUser.companyId),
+    eq(users.role, "STAFF"),
+    eq(users.isDeleted, true),
+    eq(users.employeeId, employeeId),
+  ];
+
+  if (authUser.role === "ADMIN") {
+    if (!authUser.departmentId) {
+      throw new AppError(403, "Department context is required");
+    }
+
+    userConditions.push(
+      eq(users.departmentId, authUser.departmentId)
+    );
+  }
+
+  const [staffUser] = await db
+    .select({
+      id: users.id,
+    })
+    .from(users)
+    .where(and(...userConditions))
+    .limit(1);
+
+  if (!staffUser) {
+    throw new AppError(404, "Deleted staff member not found");
+  }
+
+  const attendanceConditions = [
+    eq(attendance.companyId, authUser.companyId),
+    eq(attendance.employeeId, staffUser.id),
+    eq(attendance.isDeleted, true),
+  ];
+
+  if (authUser.role === "ADMIN") {
+    attendanceConditions.push(
+      eq(attendance.departmentId, authUser.departmentId!)
+    );
+  }
+
+  await db
+    .delete(attendance)
+    .where(and(...attendanceConditions));
 
   return { success: true };
 }

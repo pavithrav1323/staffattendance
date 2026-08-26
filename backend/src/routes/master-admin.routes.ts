@@ -34,6 +34,7 @@ import {
 import {
   getAdminAttendanceSummary,
   getApprovedStaff,
+  getMasterAdminDashboardStats,
   getPendingStaff,
   approveStaff,
   rejectStaff,
@@ -44,6 +45,12 @@ const router = Router();
 const masterAdminAccess = [
   authenticateToken,
   allowRoles("MASTER_ADMIN"),
+  requireCompanyContext,
+];
+
+const masterAdminAttendanceAccess = [
+  authenticateToken,
+  allowRoles("ADMIN", "MASTER_ADMIN"),
   requireCompanyContext,
 ];
 
@@ -262,7 +269,7 @@ router.patch(
  */
 router.get(
   "/attendance",
-  ...masterAdminAccess,
+  ...masterAdminAttendanceAccess,
   async (
     req: AuthRequest,
     res: Response,
@@ -338,7 +345,7 @@ router.get(
  */
 router.get(
   "/attendance/export",
-  ...masterAdminAccess,
+  ...masterAdminAttendanceAccess,
   async (
     req: AuthRequest,
     res: Response,
@@ -412,7 +419,7 @@ router.get(
  */
 router.get(
   "/attendance/summary",
-  ...masterAdminAccess,
+  ...masterAdminAttendanceAccess,
   async (
     req: AuthRequest,
     res: Response,
@@ -533,6 +540,31 @@ router.patch(
       res.status(200).json({
         success: true,
         message: "Staff registration rejected.",
+        data,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * GET /api/master-admin/dashboard
+ * Returns dashboard statistics for Master Admin
+ */
+router.get(
+  "/dashboard",
+  ...masterAdminAccess,
+  async (
+    req: AuthRequest,
+    res: Response,
+    next: NextFunction
+  ) => {
+    try {
+      const data = await getMasterAdminDashboardStats(req.user!);
+
+      res.status(200).json({
+        success: true,
         data,
       });
     } catch (error) {

@@ -1,4 +1,4 @@
-import { pgTable, uuid, date, timestamp, numeric, integer, varchar, text, } from "drizzle-orm/pg-core";
+import { pgTable, uuid, date, timestamp, numeric, integer, varchar, text, boolean, } from "drizzle-orm/pg-core";
 import { companies } from "./companies.js";
 import { departments } from "./departments.js";
 import { workLocations } from "./work-locations.js";
@@ -81,5 +81,12 @@ export const attendance = pgTable("attendance", {
     })
         .notNull()
         .defaultNow(),
+    isDeleted: boolean("is_deleted")
+        .notNull()
+        .default(false),
+    deletedAt: timestamp("deleted_at", {
+        withTimezone: true,
+    }),
+    deletedBy: uuid("deleted_by"),
 });
 //# sourceMappingURL=attendance.js.map
