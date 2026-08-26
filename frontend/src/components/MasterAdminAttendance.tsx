@@ -565,7 +565,7 @@ const MasterAdminAttendance = () => {
         </div>
       ) : (
         <>
-          <div className="table-container">
+          <div className="attendance-table-wrapper">
             <table className="attendance-table">
               <thead>
                 <tr>

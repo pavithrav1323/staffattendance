@@ -1281,7 +1281,12 @@ export async function getDeletedStaff(
       name: users.name,
     })
     .from(users)
+    .innerJoin(
+      attendance,
+      eq(attendance.employeeId, users.id)
+    )
     .where(and(...conditions))
+    .groupBy(users.id, users.employeeId, users.name)
     .orderBy(users.name);
 }
 

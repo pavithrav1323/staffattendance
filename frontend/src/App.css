@@ -406,6 +406,27 @@
   border-radius: 6px;
 }
 
+body,
+#root {
+  overflow-x: hidden;
+}
+
+.attendance-table-wrapper {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: auto;
+  max-height: 500px;
+  display: block;
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+}
+
+.attendance-table-wrapper table {
+  min-width: 1200px;
+  width: max-content;
+}
+
 .table-container {
   width: 100%;
   max-width: 100%;
