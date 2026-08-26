@@ -30,6 +30,11 @@ import {
 } from "../modules/auth/auth.schema.js";
 
 import { validateBody } from "../middleware/validate.middleware.js";
+import {
+  loginRateLimiter,
+  refreshRateLimiter,
+  passwordResetRateLimiter,
+} from "../middleware/rate-limit.middleware.js";
 import { AppError } from "../utils/app-error.js";
 
 const router = Router();
@@ -126,6 +131,7 @@ router.get(
 
 router.post(
   "/login",
+  loginRateLimiter,
   validateBody(loginSchema),
   async (
     req: Request,
@@ -148,6 +154,7 @@ router.post(
 
 router.post(
   "/refresh",
+  refreshRateLimiter,
   validateBody(refreshSchema),
   async (
     req: Request,
@@ -215,6 +222,7 @@ router.post(
 
 router.post(
   "/change-password",
+  passwordResetRateLimiter,
   authenticateToken,
   async (
     req: AuthRequest,

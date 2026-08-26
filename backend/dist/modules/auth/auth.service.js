@@ -6,6 +6,7 @@ import { users } from "../../db/schema/users.js";
 import { staffDevices } from "../../db/schema/staff-devices.js";
 import { AppError } from "../../utils/app-error.js";
 import { hashDeviceToken } from "../../utils/device-token.js";
+import { logger } from "../../utils/logger.js";
 import { createAccessToken, createRefreshToken, verifyRefreshToken, } from "../../utils/jwt.js";
 import { comparePassword, hashPassword, validatePassword, } from "../../utils/password.js";
 import { normalizeEmail, normalizeEmployeeId, normalizeCompanyCode, } from "../../utils/normalization.js";
@@ -119,7 +120,7 @@ export async function registerStaff(input) {
     }
 }
 export async function login(input) {
-    console.log("LOGIN REQUEST:", input.email);
+    logger.info("Login attempt received");
     const [user] = await db
         .select({
         id: users.id,
@@ -136,20 +137,49 @@ export async function login(input) {
         departmentName: departments.name,
         workLocationId: users.workLocationId,
         mustChangePassword: users.mustChangePassword,
+        failedLoginAttempts: users.failedLoginAttempts,
+        lockedUntil: users.lockedUntil,
     })
         .from(users)
         .leftJoin(companies, eq(users.companyId, companies.id))
         .leftJoin(departments, eq(users.departmentId, departments.id))
         .where(eq(users.email, input.email))
         .limit(1);
-    console.log("USER FOUND:", user ? { id: user.id, email: user.email, role: user.role, status: user.status } : null);
     if (!user) {
         throw new AppError(401, "Invalid email or password");
     }
+    // Account-level lockout check
+    if (user.lockedUntil && new Date(user.lockedUntil) > new Date()) {
+        throw new AppError(429, "Account temporarily locked. Try again later.", "ACCOUNT_LOCKED");
+    }
     const passwordMatches = await comparePassword(input.password, user.passwordHash);
-    console.log("PASSWORD MATCH:", passwordMatches);
     if (!passwordMatches) {
+        const newAttempts = (user.failedLoginAttempts || 0) + 1;
+        const isLocked = newAttempts >= 5;
+        const lockedUntil = isLocked ? new Date(Date.now() + 15 * 60 * 1000) : null;
+        await db
+            .update(users)
+            .set({
+            failedLoginAttempts: newAttempts,
+            lockedUntil,
+            updatedAt: new Date(),
+        })
+            .where(eq(users.id, user.id));
+        if (isLocked) {
+            throw new AppError(429, "Account temporarily locked. Try again later.", "ACCOUNT_LOCKED");
+        }
         throw new AppError(401, "Invalid email or password");
+    }
+    // Clear failed login attempts upon successful authentication
+    if (user.failedLoginAttempts > 0 || user.lockedUntil) {
+        await db
+            .update(users)
+            .set({
+            failedLoginAttempts: 0,
+            lockedUntil: null,
+            updatedAt: new Date(),
+        })
+            .where(eq(users.id, user.id));
     }
     if (user.status !== "APPROVED") {
         if (user.role === "STAFF" &&
@@ -185,7 +215,6 @@ export async function login(input) {
         const incomingHash = input.deviceToken
             ? hashDeviceToken(input.deviceToken)
             : null;
-        console.log("LOGIN EMAIL:", user.email);
         const [activeDevice] = await db
             .select({
             id: staffDevices.id,
@@ -194,8 +223,6 @@ export async function login(input) {
             .from(staffDevices)
             .where(and(eq(staffDevices.userId, user.id), eq(staffDevices.status, "ACTIVE")))
             .limit(1);
-        console.log("USER DEVICE:", activeDevice?.tokenHash ?? "none");
-        console.log("CURRENT DEVICE:", incomingHash);
         // Allow if the current device is already the active one
         if (activeDevice && incomingHash && activeDevice.tokenHash === incomingHash) {
             // Normal login on registered device, continue
@@ -211,10 +238,13 @@ export async function login(input) {
                 .from(users)
                 .where(and(eq(users.id, user.id), eq(users.deviceResetUsed, false), gte(users.deviceResetExpiry, now)))
                 .limit(1);
-            console.log("RESET ALLOWED:", resetRecord ? "true" : "false");
-            console.log("RESET EXPIRY:", resetRecord?.deviceResetExpiry?.toISOString() ?? "none");
-            if (resetRecord && resetRecord.deviceResetExpiry) {
-                // Valid reset window: allow new device, invalidate old device, consume reset
+            const isValidResetToken = Boolean(resetRecord) &&
+                Boolean(resetRecord?.deviceResetToken) &&
+                Boolean(resetRecord?.deviceResetExpiry) &&
+                Boolean(input.deviceResetToken) &&
+                input.deviceResetToken === resetRecord?.deviceResetToken;
+            if (isValidResetToken) {
+                // Valid reset window with matching token: allow new device, invalidate old device, consume reset
                 if (activeDevice) {
                     await db
                         .update(staffDevices)
@@ -240,13 +270,13 @@ export async function login(input) {
                     deviceResetToken: null,
                     deviceResetExpiry: null,
                     deviceResetRequestedAt: null,
-                    deviceResetUsed: false,
+                    deviceResetUsed: true,
                     updatedAt: new Date(),
                 })
                     .where(eq(users.id, user.id));
             }
             else {
-                // No valid reset and device mismatch
+                // No valid reset or token mismatch
                 await db
                     .insert(staffDevices)
                     .values({
@@ -256,11 +286,11 @@ export async function login(input) {
                     userAgent: "",
                     status: "PENDING",
                 });
-                throw new AppError(403, "This account is already active on another device. Please contact administrator to reset your device.", "STAFF_DEVICE_NOT_REGISTERED");
+                throw new AppError(403, "Device authorization required.", "STAFF_DEVICE_NOT_REGISTERED");
             }
         }
         else {
-            throw new AppError(403, "This account is already active on another device. Please contact administrator to reset your device.", "STAFF_DEVICE_NOT_REGISTERED");
+            throw new AppError(403, "Device authorization required.", "STAFF_DEVICE_NOT_REGISTERED");
         }
     }
     const accessToken = createAccessToken({

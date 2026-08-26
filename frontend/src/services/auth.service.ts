@@ -33,12 +33,13 @@ interface RefreshResponse {
   };
 }
 
-const login = async (email: string, password: string): Promise<User> => {
+const login = async (email: string, password: string, deviceResetToken?: string): Promise<User> => {
   const deviceToken = await getOrCreateDeviceToken();
   const response: LoginResponse = await apiRequest('/auth/login', 'POST', {
     email,
     password,
     deviceToken,
+    ...(deviceResetToken ? { deviceResetToken } : {}),
   });
 
   if (response.success && response.data) {
