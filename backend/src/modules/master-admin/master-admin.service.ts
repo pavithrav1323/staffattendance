@@ -608,9 +608,10 @@ export async function getMasterAdminAttendance(
       workingMinutes: attendance.workingMinutes,
       attendanceStatus: attendance.attendanceStatus,
       sessionStatus: attendance.sessionStatus,
+      isDeleted: attendance.isDeleted,
     })
     .from(attendance)
-    .innerJoin(
+    .leftJoin(
       users,
       eq(attendance.employeeId, users.id)
     )
@@ -769,7 +770,7 @@ export async function getMasterAdminAttendanceExport(
       sessionStatus: attendance.sessionStatus,
     })
     .from(attendance)
-    .innerJoin(
+    .leftJoin(
       users,
       eq(attendance.employeeId, users.id)
     )

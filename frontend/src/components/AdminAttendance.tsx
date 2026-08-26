@@ -41,10 +41,20 @@ const AdminAttendance = ({ staffList }: AdminAttendanceProps) => {
   });
   const [loading, setLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [deletingRecords, setDeletingRecords] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [activeSessionOnly, setActiveSessionOnly] = useState(false);
   const attendanceTableRef = useRef<HTMLDivElement>(null);
+
+  // Deleted staff management state
+  const [deletedStaffMode, setDeletedStaffMode] = useState(false);
+  const [deletedStaffList, setDeletedStaffList] = useState<Array<{ id: string; employeeId: string; name: string }>>([]);
+  const [selectedDeletedStaffId, setSelectedDeletedStaffId] = useState('');
+  const [deletedStaffRecords, setDeletedStaffRecords] = useState<AttendanceRecord[]>([]);
+  const [loadingDeletedStaff, setLoadingDeletedStaff] = useState(false);
+  const [loadingDeletedRecords, setLoadingDeletedRecords] = useState(false);
 
   const buildDateParams = (): {
     date?: string;
@@ -250,6 +260,98 @@ const AdminAttendance = ({ staffList }: AdminAttendanceProps) => {
     }
   };
 
+  const handleViewDeletedStaffRecords = async () => {
+    if (deletedStaffMode) {
+      // Toggle off — return to normal report
+      setDeletedStaffMode(false);
+      setSelectedDeletedStaffId('');
+      setDeletedStaffRecords([]);
+      return;
+    }
+
+    setError(null);
+    setSuccessMessage(null);
+    setLoadingDeletedStaff(true);
+
+    try {
+      const response = await adminService.getDeletedStaff();
+      if (response.success && response.data) {
+        setDeletedStaffList(response.data);
+        setDeletedStaffMode(true);
+        if (response.data.length === 0) {
+          setSuccessMessage('No deleted staff members found.');
+        }
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to load deleted staff list');
+    } finally {
+      setLoadingDeletedStaff(false);
+    }
+  };
+
+  const handleSelectDeletedStaff = async (employeeId: string) => {
+    setSelectedDeletedStaffId(employeeId);
+    setDeletedStaffRecords([]);
+    setError(null);
+    setSuccessMessage(null);
+
+    if (!employeeId) {
+      return;
+    }
+
+    setLoadingDeletedRecords(true);
+
+    try {
+      const response = await adminService.getDeletedStaffAttendance(employeeId);
+      if (response.success && response.data) {
+        setDeletedStaffRecords(response.data.records || []);
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to load deleted staff attendance records');
+    } finally {
+      setLoadingDeletedRecords(false);
+    }
+  };
+
+  const handleDeleteSelectedStaffRecords = async () => {
+    if (!selectedDeletedStaffId) {
+      return;
+    }
+
+    const selectedStaff = deletedStaffList.find(
+      (s) => s.employeeId === selectedDeletedStaffId
+    );
+    const staffLabel = selectedStaff
+      ? `${selectedStaff.employeeId} - ${selectedStaff.name}`
+      : selectedDeletedStaffId;
+
+    if (!window.confirm(`Are you sure you want to permanently delete attendance records for this deleted staff?\n\n${staffLabel}`)) {
+      return;
+    }
+
+    setDeletingRecords(true);
+    setError(null);
+    setSuccessMessage(null);
+
+    try {
+      const response = await adminService.deleteDeletedStaffAttendance(selectedDeletedStaffId);
+      if (response.success) {
+        setSuccessMessage(response.message || 'Deleted staff attendance records removed successfully');
+        setDeletedStaffRecords([]);
+        setSelectedDeletedStaffId('');
+        // Refresh deleted staff list in case it needs updating
+        const staffResponse = await adminService.getDeletedStaff();
+        if (staffResponse.success && staffResponse.data) {
+          setDeletedStaffList(staffResponse.data);
+        }
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to delete staff records');
+    } finally {
+      setDeletingRecords(false);
+    }
+  };
+
   const formatTimeOnly = (dateString: string | null): string => {
     if (!dateString) return '--';
     const date = new Date(dateString);
@@ -354,6 +456,13 @@ const AdminAttendance = ({ staffList }: AdminAttendanceProps) => {
         <div className="error-message">
           {error}
           <button onClick={() => setError(null)} className="close-button">×</button>
+        </div>
+      )}
+
+      {successMessage && (
+        <div className="success-message">
+          {successMessage}
+          <button onClick={() => setSuccessMessage(null)} className="close-button">×</button>
         </div>
       )}
 
@@ -504,11 +613,113 @@ const AdminAttendance = ({ staffList }: AdminAttendanceProps) => {
           >
             {exporting ? 'Preparing Download...' : 'Download Report'}
           </button>
+
+          <button
+            onClick={handleViewDeletedStaffRecords}
+            disabled={loadingDeletedStaff || loading}
+            className="export-button delete-deleted-records-button"
+          >
+            {loadingDeletedStaff ? 'Loading...' : deletedStaffMode ? 'Back to Normal Report' : 'View Deleted Staff Records'}
+          </button>
         </div>
+
+        {deletedStaffMode && (
+          <div className="filters-row filters-row-two-col deleted-staff-management">
+            {deletedStaffList.length === 0 ? (
+              <div className="deleted-staff-empty-state">
+                <span className="deleted-staff-empty-icon">🗑</span>
+                <span className="deleted-staff-empty-message">
+                  No deleted staff records available.
+                </span>
+              </div>
+            ) : (
+              <>
+                <div className="filter-group">
+                  <label htmlFor="deletedStaffSelect">Select Deleted Staff</label>
+                  <select
+                    id="deletedStaffSelect"
+                    value={selectedDeletedStaffId}
+                    onChange={(e) => handleSelectDeletedStaff(e.target.value)}
+                    disabled={loadingDeletedRecords || deletingRecords}
+                  >
+                    <option value="">-- Select Deleted Staff --</option>
+                    {deletedStaffList.map((staff) => (
+                      <option key={staff.id} value={staff.employeeId}>
+                        {staff.employeeId} - {staff.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {selectedDeletedStaffId && (
+                  <div className="filter-group">
+                    <label>&nbsp;</label>
+                    <button
+                      onClick={handleDeleteSelectedStaffRecords}
+                      disabled={deletingRecords || loadingDeletedRecords || deletedStaffRecords.length === 0}
+                      className="export-button delete-deleted-records-button"
+                    >
+                      {deletingRecords ? 'Deleting...' : 'Delete Staff Records'}
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Attendance Table */}
-      {loading ? (
+      {deletedStaffMode ? (
+        loadingDeletedRecords ? (
+          <div className="loading-state">Loading deleted staff attendance records...</div>
+        ) : !selectedDeletedStaffId ? (
+          <div className="empty-state">Select a deleted staff member to view their attendance records.</div>
+        ) : deletedStaffRecords.length === 0 ? (
+          <div className="empty-state">No deleted attendance records found for the selected staff member.</div>
+        ) : (
+          <div className="attendance-table-section">
+            <table className="staff-table">
+              <thead>
+                <tr>
+                  <th>Employee ID</th>
+                  <th>Employee Name</th>
+                  <th>Date</th>
+                  <th>Clock In</th>
+                  <th>Clock Out</th>
+                  <th>Location</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {deletedStaffRecords.map((record, index) => (
+                  <tr key={`${record.employeeId}-${record.attendanceDate}-${index}`} className="deleted-attendance-row">
+                    <td>{record.employeeId}</td>
+                    <td>{record.employeeName}</td>
+                    <td>{record.attendanceDate}</td>
+                    <td>{formatTimeOnly(record.clockInTime)}</td>
+                    <td>{formatTimeOnly(record.clockOutTime)}</td>
+                    <td>
+                      <div className="location-cell">
+                        {record.clockInLocationName ? (
+                          <span className="location-name">{record.clockInLocationName}</span>
+                        ) : record.clockInLatitude && record.clockInLongitude ? (
+                          <span className="location-captured">Location captured</span>
+                        ) : (
+                          <span className="not-available">Not available</span>
+                        )}
+                      </div>
+                    </td>
+                    <td>
+                      <span className="status-badge status-deleted-attendance">DELETED</span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )
+      ) : loading ? (
         <div className="loading-state">Loading attendance report...</div>
       ) : attendance.length === 0 ? (
         <div className="empty-state">No attendance records found for the selected period.</div>
@@ -564,7 +775,7 @@ const AdminAttendance = ({ staffList }: AdminAttendanceProps) => {
                     </thead>
                     <tbody>
                       {displayedAttendance.map((record, index) => (
-                        <tr key={`${record.employeeId}-${record.attendanceDate}-${index}`}>
+                        <tr key={`${record.employeeId}-${record.attendanceDate}-${index}`} className={record.isDeleted ? 'deleted-attendance-row' : ''}>
                           <td>{record.employeeId}</td>
                           <td>{record.employeeName}</td>
                           <td>{record.attendanceDate}</td>
@@ -635,7 +846,13 @@ const AdminAttendance = ({ staffList }: AdminAttendanceProps) => {
                               {formatWorkingTime(record.workingMinutes)}
                             </span>
                           </td>
-                          <td>{record.attendanceStatus}</td>
+                          <td>
+                            {record.isDeleted ? (
+                              <span className="status-badge status-deleted-attendance">DELETED</span>
+                            ) : (
+                              record.attendanceStatus
+                            )}
+                          </td>
                           <td>{record.sessionStatus}</td>
                         </tr>
                       ))}

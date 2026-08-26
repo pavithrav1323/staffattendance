@@ -374,9 +374,10 @@ export async function getMasterAdminAttendance(authUser, reportType, date, month
         workingMinutes: attendance.workingMinutes,
         attendanceStatus: attendance.attendanceStatus,
         sessionStatus: attendance.sessionStatus,
+        isDeleted: attendance.isDeleted,
     })
         .from(attendance)
-        .innerJoin(users, eq(attendance.employeeId, users.id))
+        .leftJoin(users, eq(attendance.employeeId, users.id))
         .where(and(...conditions))
         .orderBy(desc(attendance.attendanceDate), desc(attendance.clockInTime))
         .limit(currentLimit)
@@ -472,7 +473,7 @@ export async function getMasterAdminAttendanceExport(authUser, reportType, date,
         sessionStatus: attendance.sessionStatus,
     })
         .from(attendance)
-        .innerJoin(users, eq(attendance.employeeId, users.id))
+        .leftJoin(users, eq(attendance.employeeId, users.id))
         .leftJoin(departments, eq(attendance.departmentId, departments.id))
         .where(and(...conditions))
         .orderBy(desc(attendance.attendanceDate), desc(attendance.clockInTime));

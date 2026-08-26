@@ -5,11 +5,16 @@ import { requireCompanyContext } from "../middleware/tenant.middleware.js";
 import { validateBody } from "../middleware/validate.middleware.js";
 import { createAdminSchema, createDepartmentSchema, } from "../modules/master-admin/master-admin.schema.js";
 import { activateAdmin, createAdmin, createDepartment, deactivateAdmin, deleteAdmin, deleteDepartment, getAdmins, getDepartments, getMasterAdminAttendance, getMasterAdminAttendanceExport, } from "../modules/master-admin/master-admin.service.js";
-import { getAdminAttendanceSummary, getApprovedStaff, getPendingStaff, approveStaff, rejectStaff, } from "../modules/admin/admin.service.js";
+import { getAdminAttendanceSummary, getApprovedStaff, getMasterAdminDashboardStats, getPendingStaff, approveStaff, rejectStaff, } from "../modules/admin/admin.service.js";
 const router = Router();
 const masterAdminAccess = [
     authenticateToken,
     allowRoles("MASTER_ADMIN"),
+    requireCompanyContext,
+];
+const masterAdminAttendanceAccess = [
+    authenticateToken,
+    allowRoles("ADMIN", "MASTER_ADMIN"),
     requireCompanyContext,
 ];
 /**
@@ -141,7 +146,7 @@ router.patch("/admins/:id/deactivate", ...masterAdminAccess, async (req, res, ne
 /**
  * GET /api/master-admin/attendance
  */
-router.get("/attendance", ...masterAdminAccess, async (req, res, next) => {
+router.get("/attendance", ...masterAdminAttendanceAccess, async (req, res, next) => {
     try {
         const reportType = req.query.reportType
             ? String(req.query.reportType)
@@ -186,7 +191,7 @@ router.get("/attendance", ...masterAdminAccess, async (req, res, next) => {
 /**
  * GET /api/master-admin/attendance/export
  */
-router.get("/attendance/export", ...masterAdminAccess, async (req, res, next) => {
+router.get("/attendance/export", ...masterAdminAttendanceAccess, async (req, res, next) => {
     try {
         const reportType = req.query.reportType
             ? String(req.query.reportType)
@@ -227,7 +232,7 @@ router.get("/attendance/export", ...masterAdminAccess, async (req, res, next) =>
 /**
  * GET /api/master-admin/attendance/summary
  */
-router.get("/attendance/summary", ...masterAdminAccess, async (req, res, next) => {
+router.get("/attendance/summary", ...masterAdminAttendanceAccess, async (req, res, next) => {
     try {
         const data = await getAdminAttendanceSummary(req.user);
         res.status(200).json({
@@ -296,6 +301,22 @@ router.patch("/staff/:id/reject", ...masterAdminAccess, async (req, res, next) =
         res.status(200).json({
             success: true,
             message: "Staff registration rejected.",
+            data,
+        });
+    }
+    catch (error) {
+        next(error);
+    }
+});
+/**
+ * GET /api/master-admin/dashboard
+ * Returns dashboard statistics for Master Admin
+ */
+router.get("/dashboard", ...masterAdminAccess, async (req, res, next) => {
+    try {
+        const data = await getMasterAdminDashboardStats(req.user);
+        res.status(200).json({
+            success: true,
             data,
         });
     }

@@ -33,6 +33,18 @@ export const users = pgTable("users", {
     updatedAt: timestamp("updated_at", { withTimezone: true })
         .notNull()
         .defaultNow(),
+    isDeleted: boolean("is_deleted")
+        .notNull()
+        .default(false),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+    deviceResetToken: varchar("device_reset_token", { length: 255 }),
+    deviceResetRequestedAt: timestamp("device_reset_requested_at", {
+        withTimezone: true,
+    }),
+    deviceResetExpiry: timestamp("device_reset_expiry", {
+        withTimezone: true,
+    }),
+    deviceResetUsed: boolean("device_reset_used").default(false),
 }, (table) => [
     unique("users_company_employee_unique").on(table.companyId, table.employeeId),
 ]);

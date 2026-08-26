@@ -22,6 +22,37 @@ interface PendingStaffResponse {
   data?: StaffRecord[];
 }
 
+interface DeletedStaffMember {
+  id: string;
+  employeeId: string;
+  name: string;
+}
+
+interface DeletedStaffResponse {
+  success: boolean;
+  data?: DeletedStaffMember[];
+}
+
+interface DeletedStaffAttendanceResponse {
+  success: boolean;
+  data?: {
+    staff: DeletedStaffMember;
+    records: AttendanceRecord[];
+  };
+}
+
+interface DeviceResetData {
+  resetToken: string;
+  employeeId: string;
+  expiresAt: string;
+}
+
+interface DeviceResetResponse {
+  success: boolean;
+  message: string;
+  data?: DeviceResetData;
+}
+
 interface ApproveRejectResponse {
   success: boolean;
   message: string;
@@ -45,6 +76,7 @@ interface AttendanceRecord {
   workingMinutes: number | null;
   attendanceStatus: string;
   sessionStatus: string;
+  isDeleted?: boolean;
 }
 
 export type { AttendanceRecord };
@@ -68,6 +100,16 @@ interface AttendanceSummaryResponse {
     presentRecords: number;
     activeSessions: number;
     totalWorkingMinutes: number;
+  };
+}
+
+interface DashboardStatsResponse {
+  success: boolean;
+  data?: {
+    totalStaff: number;
+    pendingStaff: number;
+    presentRecords: number;
+    presentDate: string;
   };
 }
 
@@ -100,12 +142,12 @@ export const adminService = {
     return apiRequest(`/admin/staff/${staffId}/reset-password`, 'PATCH', { temporaryPassword });
   },
 
-  resetStaffDevice: async (staffId: string): Promise<ApproveRejectResponse> => {
-    return apiRequest(`/admin/staff/${staffId}/reset-device`, 'PATCH');
-  },
-
   deleteStaff: async (staffId: string): Promise<ApproveRejectResponse> => {
     return apiRequest(`/admin/staff/${staffId}`, 'DELETE');
+  },
+
+  resetStaffDevice: async (staffId: string): Promise<DeviceResetResponse> => {
+    return apiRequest(`/admin/staff/${staffId}/reset-device`, 'PATCH');
   },
 
   getAttendance: async (
@@ -136,6 +178,10 @@ export const adminService = {
 
   getAttendanceSummary: async (): Promise<AttendanceSummaryResponse> => {
     return apiRequest('/admin/attendance/summary', 'GET');
+  },
+
+  getDashboardStats: async (): Promise<DashboardStatsResponse> => {
+    return apiRequest('/admin/dashboard', 'GET');
   },
 
   exportAttendance: async (
@@ -191,5 +237,17 @@ export const adminService = {
     }
 
     return response.blob();
+  },
+
+  deleteDeletedStaffAttendance: async (employeeId: string): Promise<ApproveRejectResponse> => {
+    return apiRequest(`/admin/deleted-staff/${encodeURIComponent(employeeId)}/attendance`, 'DELETE');
+  },
+
+  getDeletedStaff: async (): Promise<DeletedStaffResponse> => {
+    return apiRequest('/admin/deleted-staff', 'GET');
+  },
+
+  getDeletedStaffAttendance: async (employeeId: string): Promise<DeletedStaffAttendanceResponse> => {
+    return apiRequest(`/admin/deleted-staff/${encodeURIComponent(employeeId)}/attendance`, 'GET');
   },
 };

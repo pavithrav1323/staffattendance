@@ -3,7 +3,7 @@ import { authenticateToken, } from "../middleware/auth.middleware.js";
 import { allowRoles } from "../middleware/role.middleware.js";
 import { requireCompanyContext, requireDepartmentContext, } from "../middleware/tenant.middleware.js";
 import { AppError } from "../utils/app-error.js";
-import { activateStaff, approveStaff, deactivateStaff, deleteStaff, getAdminAttendance, getAdminAttendanceExport, getAdminAttendanceSummary, getPendingStaff, getStaffList, rejectStaff, resetStaffDevice, resetStaffPassword, } from "../modules/admin/admin.service.js";
+import { activateStaff, approveStaff, deactivateStaff, deleteDeletedStaffAttendance, deleteStaff, getAdminAttendance, getAdminAttendanceExport, getAdminAttendanceSummary, getAdminDashboardStats, getDeletedStaff, getDeletedStaffAttendance, getPendingStaff, getStaffList, rejectStaff, resetStaffDevice, resetStaffPassword, } from "../modules/admin/admin.service.js";
 const router = Router();
 const adminAccess = [
     authenticateToken,
@@ -29,7 +29,7 @@ router.get("/staff", authenticateToken, allowRoles("ADMIN", "MASTER_ADMIN"), req
 /**
  * GET /api/admin/attendance
  */
-router.get("/attendance", authenticateToken, allowRoles("ADMIN"), requireCompanyContext, async (req, res, next) => {
+router.get("/attendance", authenticateToken, allowRoles("ADMIN", "MASTER_ADMIN"), requireCompanyContext, async (req, res, next) => {
     try {
         const reportType = req.query.reportType
             ? String(req.query.reportType)
@@ -71,7 +71,7 @@ router.get("/attendance", authenticateToken, allowRoles("ADMIN"), requireCompany
 /**
  * GET /api/admin/attendance/export
  */
-router.get("/attendance/export", authenticateToken, allowRoles("ADMIN"), requireCompanyContext, async (req, res, next) => {
+router.get("/attendance/export", authenticateToken, allowRoles("ADMIN", "MASTER_ADMIN"), requireCompanyContext, async (req, res, next) => {
     try {
         const reportType = req.query.reportType
             ? String(req.query.reportType)
@@ -101,6 +101,56 @@ router.get("/attendance/export", authenticateToken, allowRoles("ADMIN"), require
         res.setHeader("Content-Type", "text/csv; charset=utf-8");
         res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
         return res.send(csv);
+    }
+    catch (error) {
+        next(error);
+    }
+});
+/**
+ * GET /api/admin/deleted-staff
+ * Returns list of soft-deleted staff members
+ */
+router.get("/deleted-staff", authenticateToken, allowRoles("ADMIN", "MASTER_ADMIN"), requireCompanyContext, requireDepartmentContext, async (req, res, next) => {
+    try {
+        const data = await getDeletedStaff(req.user);
+        res.status(200).json({
+            success: true,
+            data,
+        });
+    }
+    catch (error) {
+        next(error);
+    }
+});
+/**
+ * GET /api/admin/deleted-staff/:employeeId/attendance
+ * Returns deleted attendance records for a specific deleted staff member
+ */
+router.get("/deleted-staff/:employeeId/attendance", authenticateToken, allowRoles("ADMIN", "MASTER_ADMIN"), requireCompanyContext, requireDepartmentContext, async (req, res, next) => {
+    try {
+        const employeeId = String(req.params.employeeId);
+        const data = await getDeletedStaffAttendance(req.user, employeeId);
+        res.status(200).json({
+            success: true,
+            data,
+        });
+    }
+    catch (error) {
+        next(error);
+    }
+});
+/**
+ * DELETE /api/admin/deleted-staff/:employeeId/attendance
+ * Permanently deletes attendance records for a specific deleted staff member
+ */
+router.delete("/deleted-staff/:employeeId/attendance", authenticateToken, allowRoles("ADMIN", "MASTER_ADMIN"), requireCompanyContext, requireDepartmentContext, async (req, res, next) => {
+    try {
+        const employeeId = String(req.params.employeeId);
+        await deleteDeletedStaffAttendance(req.user, employeeId);
+        res.status(200).json({
+            success: true,
+            message: "Deleted staff attendance records removed successfully",
+        });
     }
     catch (error) {
         next(error);
@@ -248,9 +298,25 @@ router.patch("/staff/:id/reset-device", ...adminAccess, async (req, res, next) =
 /**
  * GET /api/admin/attendance/summary
  */
-router.get("/attendance/summary", authenticateToken, allowRoles("ADMIN"), requireCompanyContext, async (req, res, next) => {
+router.get("/attendance/summary", authenticateToken, allowRoles("ADMIN", "MASTER_ADMIN"), requireCompanyContext, async (req, res, next) => {
     try {
         const data = await getAdminAttendanceSummary(req.user);
+        res.status(200).json({
+            success: true,
+            data,
+        });
+    }
+    catch (error) {
+        next(error);
+    }
+});
+/**
+ * GET /api/admin/dashboard
+ * Returns dashboard statistics for Admin / Master Admin
+ */
+router.get("/dashboard", authenticateToken, allowRoles("ADMIN", "MASTER_ADMIN"), requireCompanyContext, async (req, res, next) => {
+    try {
+        const data = await getAdminDashboardStats(req.user);
         res.status(200).json({
             success: true,
             data,

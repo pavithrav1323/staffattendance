@@ -3,6 +3,7 @@ import { masterAdminService } from '../services/master-admin.service';
 import { adminService } from '../services/admin.service';
 import { openLocation } from '../utils/map';
 import AssignedTaskCell from './AssignedTaskCell';
+import DeletedStaffAttendance from './DeletedStaffAttendance';
 
 interface AttendanceRecord {
   id: string;
@@ -24,6 +25,7 @@ interface AttendanceRecord {
   workingMinutes: number | null;
   attendanceStatus: string;
   sessionStatus: string;
+  isDeleted?: boolean;
 }
 
 interface Department {
@@ -68,10 +70,12 @@ const MasterAdminAttendance = () => {
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [staffList, setStaffList] = useState<StaffMember[]>([]);
+  const [normalReportMode, setNormalReportMode] = useState(true);
 
   // Load departments and staff list on mount
   useEffect(() => {
@@ -385,6 +389,13 @@ const MasterAdminAttendance = () => {
         </div>
       )}
 
+      {successMessage && (
+        <div className="success-message">
+          {successMessage}
+          <button onClick={() => setSuccessMessage(null)} className="close-button">×</button>
+        </div>
+      )}
+
       {validationError && (
         <div className="error-message">
           {validationError}
@@ -528,11 +539,23 @@ const MasterAdminAttendance = () => {
           >
             {exporting ? 'Preparing Download...' : 'Download Report'}
           </button>
+
+          <DeletedStaffAttendance
+            service={masterAdminService}
+            onError={(message) => setError(message)}
+            onSuccess={(message) => setSuccessMessage(message)}
+            onModeChange={(mode) => {
+              setNormalReportMode(mode === 'normal');
+              if (mode === 'normal') {
+                loadAttendance();
+              }
+            }}
+          />
         </div>
       </div>
 
       {/* Attendance Table */}
-      {loading ? (
+      {normalReportMode && (loading ? (
         <div className="loading-state">Loading attendance report...</div>
       ) : attendance.length === 0 ? (
         <div className="empty-state">
@@ -564,7 +587,7 @@ const MasterAdminAttendance = () => {
               </thead>
               <tbody>
                 {attendance.map((record, index) => (
-                  <tr key={`${record.employeeId}-${record.attendanceDate}-${index}`}>
+                  <tr key={`${record.employeeId}-${record.attendanceDate}-${index}`} className={record.isDeleted ? 'deleted-attendance-row' : ''}>
                     <td>{record.employeeId}</td>
                     <td>{record.employeeName}</td>
                     <td>{departmentNameMap.get(record.departmentId) || '--'}</td>
@@ -636,7 +659,13 @@ const MasterAdminAttendance = () => {
                         {formatWorkingTime(record.workingMinutes)}
                       </span>
                     </td>
-                    <td>{record.attendanceStatus}</td>
+                    <td>
+                      {record.isDeleted ? (
+                        <span className="status-badge status-deleted-attendance">DELETED</span>
+                      ) : (
+                        record.attendanceStatus
+                      )}
+                    </td>
                     <td>{record.sessionStatus}</td>
                   </tr>
                 ))}
@@ -665,7 +694,7 @@ const MasterAdminAttendance = () => {
             </button>
           </div>
         </>
-      )}
+      ))}
     </div>
   );
 };

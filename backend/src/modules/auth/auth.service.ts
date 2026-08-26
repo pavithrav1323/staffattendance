@@ -1,4 +1,4 @@
-import { and, eq, ilike } from "drizzle-orm";
+import { and, eq, gte, ilike } from "drizzle-orm";
 
 import { db } from "../../db/connection.js";
 import { companies } from "../../db/schema/companies.js";
@@ -301,6 +301,8 @@ export async function login(input: LoginInput) {
       ? hashDeviceToken(input.deviceToken)
       : null;
 
+    console.log("LOGIN EMAIL:", user.email);
+
     const [activeDevice] = await db
       .select({
         id: staffDevices.id,
@@ -315,8 +317,69 @@ export async function login(input: LoginInput) {
       )
       .limit(1);
 
-    if (!activeDevice || activeDevice.tokenHash !== incomingHash) {
-      if (incomingHash) {
+    console.log("USER DEVICE:", activeDevice?.tokenHash ?? "none");
+    console.log("CURRENT DEVICE:", incomingHash);
+
+    // Allow if the current device is already the active one
+    if (activeDevice && incomingHash && activeDevice.tokenHash === incomingHash) {
+      // Normal login on registered device, continue
+    } else if (incomingHash) {
+      const now = new Date();
+
+      const [resetRecord] = await db
+        .select({
+          deviceResetToken: users.deviceResetToken,
+          deviceResetExpiry: users.deviceResetExpiry,
+          deviceResetUsed: users.deviceResetUsed,
+        })
+        .from(users)
+        .where(
+          and(
+            eq(users.id, user.id),
+            eq(users.deviceResetUsed, false),
+            gte(users.deviceResetExpiry, now)
+          )
+        )
+        .limit(1);
+
+      console.log("RESET ALLOWED:", resetRecord ? "true" : "false");
+      console.log("RESET EXPIRY:", resetRecord?.deviceResetExpiry?.toISOString() ?? "none");
+
+      if (resetRecord && resetRecord.deviceResetExpiry) {
+        // Valid reset window: allow new device, invalidate old device, consume reset
+        if (activeDevice) {
+          await db
+            .update(staffDevices)
+            .set({
+              status: "REVOKED",
+              revokedAt: new Date(),
+            })
+            .where(eq(staffDevices.id, activeDevice.id));
+        }
+
+        await db
+          .insert(staffDevices)
+          .values({
+            userId: user.id,
+            tokenHash: incomingHash,
+            deviceName: "Unknown",
+            userAgent: "",
+            status: "ACTIVE",
+            approvedAt: new Date(),
+          });
+
+        await db
+          .update(users)
+          .set({
+            deviceResetToken: null,
+            deviceResetExpiry: null,
+            deviceResetRequestedAt: null,
+            deviceResetUsed: false,
+            updatedAt: new Date(),
+          })
+          .where(eq(users.id, user.id));
+      } else {
+        // No valid reset and device mismatch
         await db
           .insert(staffDevices)
           .values({
@@ -326,11 +389,17 @@ export async function login(input: LoginInput) {
             userAgent: "",
             status: "PENDING",
           });
-      }
 
+        throw new AppError(
+          403,
+          "This account is already active on another device. Please contact administrator to reset your device.",
+          "STAFF_DEVICE_NOT_REGISTERED"
+        );
+      }
+    } else {
       throw new AppError(
         403,
-        "This device is not registered for your Staff account. Please contact your Admin to approve a device change.",
+        "This account is already active on another device. Please contact administrator to reset your device.",
         "STAFF_DEVICE_NOT_REGISTERED"
       );
     }

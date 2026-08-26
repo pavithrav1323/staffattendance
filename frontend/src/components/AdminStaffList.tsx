@@ -31,6 +31,10 @@ const AdminStaffList = ({ refreshKey }: AdminStaffListProps) => {
   const [resetError, setResetError] = useState<string | null>(null);
   const [resetSuccess, setResetSuccess] = useState<string | null>(null);
 
+  const [resetToken, setResetToken] = useState<string | null>(null);
+  const [resetTokenExpiry, setResetTokenExpiry] = useState<string | null>(null);
+  const [resettingStaffId, setResettingStaffId] = useState<string | null>(null);
+
   const loadStaff = async () => {
     try {
       setLoading(true);
@@ -164,16 +168,36 @@ const AdminStaffList = ({ refreshKey }: AdminStaffListProps) => {
   };
 
   const handleResetDevice = async (staffId: string, name: string) => {
-    if (!window.confirm(`Reset the registered device for ${name}? The Staff user will need to enroll their new device before logging in again.`)) return;
+    if (resettingStaffId) return;
+
+    const token = localStorage.getItem('accessToken');
+    if (!token) {
+      setError('Session expired. Please login again.');
+      return;
+    }
+
+    if (!window.confirm(`Allow ${name} to login from another device? The Staff user will need to use the reset token to enroll their new device before logging in again.`)) return;
+
+    setResettingStaffId(staffId);
+    setMessage(null);
+    setError(null);
+    setResetToken(null);
+    setResetTokenExpiry(null);
 
     try {
-      setMessage(null);
-      setError(null);
-      await adminService.resetStaffDevice(staffId);
-      setMessage('Registered device reset successfully');
+      const response = await adminService.resetStaffDevice(staffId);
+      if (response.success && response.data) {
+        setMessage(`Device reset enabled for 5 minutes for ${name}. Staff must use the reset token to login from the new device.`);
+        setResetToken(response.data.resetToken);
+        setResetTokenExpiry(new Date(response.data.expiresAt).toLocaleString());
+      } else {
+        setMessage(response.message || 'Registered device reset successfully');
+      }
       loadStaff();
     } catch (err: any) {
       setError(err.message || 'Failed to reset device');
+    } finally {
+      setResettingStaffId(null);
     }
   };
 
@@ -200,7 +224,19 @@ const AdminStaffList = ({ refreshKey }: AdminStaffListProps) => {
       {message && (
         <div className="success-message">
           {message}
-          <button onClick={() => setMessage(null)} className="close-button">×</button>
+          <button onClick={() => { setMessage(null); setResetToken(null); setResetTokenExpiry(null); }} className="close-button">×</button>
+        </div>
+      )}
+
+      {resetToken && (
+        <div className="success-message" style={{ whiteSpace: 'pre-wrap' }}>
+          <strong>Reset Token:</strong> {resetToken}
+          {resetTokenExpiry && (
+            <div><strong>Expires At:</strong> {resetTokenExpiry}</div>
+          )}
+          <div style={{ fontSize: '0.85rem', marginTop: '0.5rem' }}>
+            Share this token with the staff. It can be used only once and expires in 5 minutes.
+          </div>
         </div>
       )}
 
@@ -286,8 +322,9 @@ const AdminStaffList = ({ refreshKey }: AdminStaffListProps) => {
                               onClick={() => handleResetDevice(staffMember.id, staffMember.name)}
                               className="action-btn action-btn-reset"
                               type="button"
+                              disabled={resettingStaffId === staffMember.id}
                             >
-                              Reset Device
+                              {resettingStaffId === staffMember.id ? 'Allowing...' : 'Allow From Another Device'}
                             </button>
                           </div>
                         </td>

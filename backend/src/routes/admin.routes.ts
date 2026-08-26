@@ -22,10 +22,14 @@ import {
   activateStaff,
   approveStaff,
   deactivateStaff,
+  deleteDeletedStaffAttendance,
   deleteStaff,
   getAdminAttendance,
   getAdminAttendanceExport,
   getAdminAttendanceSummary,
+  getAdminDashboardStats,
+  getDeletedStaff,
+  getDeletedStaffAttendance,
   getPendingStaff,
   getStaffList,
   rejectStaff,
@@ -73,7 +77,7 @@ router.get(
 router.get(
   "/attendance",
   authenticateToken,
-  allowRoles("ADMIN"),
+  allowRoles("ADMIN", "MASTER_ADMIN"),
   requireCompanyContext,
   async (
     req: AuthRequest,
@@ -146,7 +150,7 @@ router.get(
 router.get(
   "/attendance/export",
   authenticateToken,
-  allowRoles("ADMIN"),
+  allowRoles("ADMIN", "MASTER_ADMIN"),
   requireCompanyContext,
   async (
     req: AuthRequest,
@@ -205,6 +209,94 @@ router.get(
       );
 
       return res.send(csv);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * GET /api/admin/deleted-staff
+ * Returns list of soft-deleted staff members
+ */
+router.get(
+  "/deleted-staff",
+  authenticateToken,
+  allowRoles("ADMIN", "MASTER_ADMIN"),
+  requireCompanyContext,
+  requireDepartmentContext,
+  async (
+    req: AuthRequest,
+    res: Response,
+    next: NextFunction
+  ) => {
+    try {
+      const data = await getDeletedStaff(req.user!);
+
+      res.status(200).json({
+        success: true,
+        data,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * GET /api/admin/deleted-staff/:employeeId/attendance
+ * Returns deleted attendance records for a specific deleted staff member
+ */
+router.get(
+  "/deleted-staff/:employeeId/attendance",
+  authenticateToken,
+  allowRoles("ADMIN", "MASTER_ADMIN"),
+  requireCompanyContext,
+  requireDepartmentContext,
+  async (
+    req: AuthRequest,
+    res: Response,
+    next: NextFunction
+  ) => {
+    try {
+      const employeeId = String(req.params.employeeId);
+
+      const data = await getDeletedStaffAttendance(req.user!, employeeId);
+
+      res.status(200).json({
+        success: true,
+        data,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * DELETE /api/admin/deleted-staff/:employeeId/attendance
+ * Permanently deletes attendance records for a specific deleted staff member
+ */
+router.delete(
+  "/deleted-staff/:employeeId/attendance",
+  authenticateToken,
+  allowRoles("ADMIN", "MASTER_ADMIN"),
+  requireCompanyContext,
+  requireDepartmentContext,
+  async (
+    req: AuthRequest,
+    res: Response,
+    next: NextFunction
+  ) => {
+    try {
+      const employeeId = String(req.params.employeeId);
+
+      await deleteDeletedStaffAttendance(req.user!, employeeId);
+
+      res.status(200).json({
+        success: true,
+        message: "Deleted staff attendance records removed successfully",
+      });
     } catch (error) {
       next(error);
     }
@@ -454,7 +546,7 @@ router.patch(
 router.get(
   "/attendance/summary",
   authenticateToken,
-  allowRoles("ADMIN"),
+  allowRoles("ADMIN", "MASTER_ADMIN"),
   requireCompanyContext,
   async (
     req: AuthRequest,
@@ -465,6 +557,33 @@ router.get(
       const data = await getAdminAttendanceSummary(
         req.user!
       );
+
+      res.status(200).json({
+        success: true,
+        data,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * GET /api/admin/dashboard
+ * Returns dashboard statistics for Admin / Master Admin
+ */
+router.get(
+  "/dashboard",
+  authenticateToken,
+  allowRoles("ADMIN", "MASTER_ADMIN"),
+  requireCompanyContext,
+  async (
+    req: AuthRequest,
+    res: Response,
+    next: NextFunction
+  ) => {
+    try {
+      const data = await getAdminDashboardStats(req.user!);
 
       res.status(200).json({
         success: true,

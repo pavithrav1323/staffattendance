@@ -66,6 +66,26 @@ interface AttendanceRecord {
   workingMinutes: number | null;
   attendanceStatus: string;
   sessionStatus: string;
+  isDeleted?: boolean;
+}
+
+interface DeletedStaffMember {
+  id: string;
+  employeeId: string;
+  name: string;
+}
+
+interface DeletedStaffResponse {
+  success: boolean;
+  data?: DeletedStaffMember[];
+}
+
+interface DeletedStaffAttendanceResponse {
+  success: boolean;
+  data?: {
+    staff: DeletedStaffMember;
+    records: AttendanceRecord[];
+  };
 }
 
 interface AttendanceResponse {
@@ -90,6 +110,18 @@ interface AdminsResponse {
   data?: Admin[];
 }
 
+interface DashboardStats {
+  totalRegistered: number;
+  pendingApproval: number;
+  approved: number;
+  rejected: number;
+}
+
+interface DashboardStatsResponse {
+  success: boolean;
+  data?: DashboardStats;
+}
+
 interface CreateResponse {
   success: boolean;
   message: string;
@@ -111,6 +143,22 @@ export const masterAdminService = {
 
   getAdmins: async (): Promise<AdminsResponse> => {
     return apiRequest('/master-admin/admins', 'GET');
+  },
+
+  getDashboardStats: async (): Promise<DashboardStatsResponse> => {
+    return apiRequest('/master-admin/dashboard', 'GET');
+  },
+
+  getDeletedStaff: async (): Promise<DeletedStaffResponse> => {
+    return apiRequest('/admin/deleted-staff', 'GET');
+  },
+
+  getDeletedStaffAttendance: async (employeeId: string): Promise<DeletedStaffAttendanceResponse> => {
+    return apiRequest(`/admin/deleted-staff/${encodeURIComponent(employeeId)}/attendance`, 'GET');
+  },
+
+  deleteDeletedStaffAttendance: async (employeeId: string): Promise<{ success: boolean; message: string }> => {
+    return apiRequest(`/admin/deleted-staff/${encodeURIComponent(employeeId)}/attendance`, 'DELETE');
   },
 
   createAdmin: async (data: {
