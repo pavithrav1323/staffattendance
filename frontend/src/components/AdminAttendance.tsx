@@ -678,7 +678,7 @@ const AdminAttendance = ({ staffList }: AdminAttendanceProps) => {
         ) : deletedStaffRecords.length === 0 ? (
           <div className="empty-state">No deleted attendance records found for the selected staff member.</div>
         ) : (
-          <div className="attendance-table-section">
+          <div className="attendance-table-wrapper">
             <table className="staff-table">
               <thead>
                 <tr>
@@ -754,7 +754,7 @@ const AdminAttendance = ({ staffList }: AdminAttendanceProps) => {
                     : 'No attendance records found for the selected period.'}
                 </div>
               ) : (
-                <div className="table-container">
+                <div className="attendance-table-wrapper">
                   <table className="attendance-table">
                     <thead>
                       <tr>

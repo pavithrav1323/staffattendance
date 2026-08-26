@@ -180,7 +180,7 @@ const DeletedStaffAttendance = ({ service, onError, onSuccess, onModeChange }: D
       )}
 
       {deletedStaffMode && selectedDeletedStaffId && (
-        <div className="attendance-table-section">
+        <div className="attendance-table-wrapper">
           {loadingDeletedRecords ? (
             <div className="loading-state">Loading deleted staff attendance records...</div>
           ) : deletedStaffRecords.length === 0 ? (
