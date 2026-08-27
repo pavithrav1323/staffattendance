@@ -18,11 +18,11 @@ export class GeolocationError extends Error {
 function getMessageForErrorCode(code: number): string {
   switch (code) {
     case 1:
-      return 'Location permission is required. Please allow location access for this site and try again.';
+      return 'Location permission is disabled. Please enable location access from browser settings.';
     case 2:
       return 'Unable to access your location from this browser. Please check location settings and try again.';
     case 3:
-      return 'Unable to get your location in time. Please try again.';
+      return 'Unable to get your current location. Please enable GPS/location permission and try again.';
     default:
       return 'Unable to get your location';
   }
@@ -68,107 +68,101 @@ async function checkGeolocationPermission(): Promise<'granted' | 'denied' | 'pro
   }
 }
 
+const MAX_ATTEMPTS = 3;
+const GEO_OPTIONS = {
+  enableHighAccuracy: true,
+  timeout: 30000,
+  maximumAge: 0,
+};
+
+const isDev = import.meta.env.DEV;
+
+function logGps(label: string, data: Record<string, any>) {
+  if (!isDev) return;
+  console.log(`[GPS][DEV] ${label}`, data);
+}
+
 export const getCurrentLocation = (): Promise<GPSLocation> => {
   return new Promise(async (resolve, reject) => {
     const debugInfo: any = {
       origin: window.location.origin,
       userAgent: navigator.userAgent,
       secureContext: window.isSecureContext,
-      geolocationSupported: 'geolocation' in navigator
+      geolocationSupported: 'geolocation' in navigator,
     };
 
-    console.log('[GPS][DEBUG]', debugInfo);
+    logGps('Init', {
+      origin: debugInfo.origin,
+      secureContext: debugInfo.secureContext,
+      geolocationSupported: debugInfo.geolocationSupported,
+    });
 
     if (!navigator.geolocation) {
       reject(new GeolocationError('Geolocation is not supported by this browser', -1, {
         ...debugInfo,
         permissionState: 'N/A',
         error: 'Geolocation not supported',
-        attempt: 'N/A'
+        attempt: 'N/A',
       }));
       return;
     }
 
-    // Log origin and permission state for diagnostics (advisory only)
-    console.log('[GPS] origin:', window.location.origin);
     const permissionState = await checkGeolocationPermission();
-    console.log('[GPS] permission API state:', permissionState);
-    console.log('[GPS][DEBUG] permission state:', permissionState);
-    
     debugInfo.permissionState = permissionState;
-    
-    // If permission state is "prompt", show informational guidance but don't block
-    if (permissionState === 'prompt') {
-      console.log('[GPS] permission prompt guidance:', getPermissionPromptMessage());
-      // Note: We don't reject here; we still attempt geolocation
-      // The calling component can choose to display this guidance to the user
+    logGps('Permission state', { permissionState });
+
+    if (permissionState === 'denied') {
+      const finalDebugInfo = { ...debugInfo, attempt: 'Permission check' };
+      reject(new GeolocationError(getMessageForErrorCode(1), 1, finalDebugInfo));
+      return;
     }
-    
-    // Do NOT reject based on Permissions API state
-    // Actual geolocation call is the source of truth
 
-    const attempt = (enableHighAccuracy: boolean, isFallback: boolean) => {
-      const options = {
-        enableHighAccuracy,
-        timeout: enableHighAccuracy ? 3000 : 3000,
-        maximumAge: isFallback ? 30000 : 0,
-      };
+    let attemptNumber = 0;
 
-      const attemptName = isFallback ? 'Fallback' : 'High Accuracy';
-
-      if (!isFallback) {
-        console.log('[GPS] High accuracy attempt started');
-      } else {
-        console.log('[GPS] Starting fallback attempt');
-      }
+    const tryGetPosition = () => {
+      attemptNumber += 1;
+      const attemptName = `Attempt ${attemptNumber}`;
+      logGps('Starting attempt', { attempt: attemptNumber, ...GEO_OPTIONS });
 
       navigator.geolocation.getCurrentPosition(
         (position) => {
-          if (!isFallback) {
-            console.log('[GPS] High accuracy success');
-          } else {
-            console.log('[GPS] Fallback success');
-          }
-          resolve({
-            latitude: position.coords.latitude,
-            longitude: position.coords.longitude,
-            accuracy: position.coords.accuracy,
+          const { latitude, longitude, accuracy } = position.coords;
+          debugInfo.attempt = attemptName;
+
+          logGps('Success', {
+            attempt: attemptNumber,
+            accuracy,
+            // Coordinates are only logged in dev; kept out of production logs
+            latitude: isDev ? latitude : undefined,
+            longitude: isDev ? longitude : undefined,
           });
+
+          resolve({ latitude, longitude, accuracy });
         },
         (error) => {
-          if (!isFallback) {
-            console.log('[GPS] High accuracy failed: code=' + error.code);
-          } else {
-            console.log('[GPS] Fallback failed: code=' + error.code);
-          }
-
-          console.log('[GPS] actual geolocation error code:', error.code);
-          console.log('[GPS] actual geolocation error message:', error.message);
-          console.error('[GPS][DEBUG] geolocation error:', {
-            code: error.code,
-            message: error.message,
-            isFallback
-          });
-
-          const finalDebugInfo = {
-            ...debugInfo,
+          logGps('Failed', {
+            attempt: attemptNumber,
             errorCode: error.code,
             errorMessage: error.message,
-            attempt: attemptName
-          };
+          });
 
-          if (!isFallback && (error.code === error.POSITION_UNAVAILABLE || error.code === error.TIMEOUT)) {
-            attempt(false, true);
+          debugInfo.errorCode = error.code;
+          debugInfo.errorMessage = error.message;
+
+          if (error.code === error.TIMEOUT && attemptNumber < MAX_ATTEMPTS) {
+            logGps('Retrying after timeout', { attempt: attemptNumber, maxAttempts: MAX_ATTEMPTS });
+            tryGetPosition();
             return;
           }
 
+          const finalDebugInfo = { ...debugInfo, attempt: attemptName };
           reject(new GeolocationError(getMessageForErrorCode(error.code), error.code, finalDebugInfo));
         },
-        options
+        GEO_OPTIONS
       );
     };
 
-    attempt(true, false);
+    tryGetPosition();
   });
 };
 
