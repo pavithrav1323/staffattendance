@@ -190,6 +190,86 @@ const MasterAdminStaffPage = () => {
     }
   };
 
+  const handleActivate = async (staffId: string, name: string) => {
+    if (!window.confirm(`Are you sure you want to activate ${name}?`)) return;
+
+    try {
+      setProcessingId(staffId);
+      setError(null);
+      setSuccess(null);
+      setApprovedStaff((prev) =>
+        prev.map((s) => (s.id === staffId ? { ...s, status: 'APPROVED' } : s))
+      );
+      const response = await masterAdminService.activateStaff(staffId);
+      if (response.success) {
+        setSuccess('Staff activated successfully');
+        loadApprovedStaff();
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to activate staff');
+      loadApprovedStaff();
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
+  const handleDeactivate = async (staffId: string, name: string) => {
+    if (!window.confirm(`Are you sure you want to deactivate ${name}?`)) return;
+
+    try {
+      setProcessingId(staffId);
+      setError(null);
+      setSuccess(null);
+      setApprovedStaff((prev) =>
+        prev.map((s) => (s.id === staffId ? { ...s, status: 'DISABLED' } : s))
+      );
+      const response = await masterAdminService.deactivateStaff(staffId);
+      if (response.success) {
+        setSuccess('Staff deactivated successfully');
+        loadApprovedStaff();
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to deactivate staff');
+      loadApprovedStaff();
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
+  const getStatusDisplay = (status: string): string => {
+    switch (status) {
+      case 'APPROVED':
+      case 'ACTIVE':
+        return 'ACTIVE';
+      case 'DISABLED':
+      case 'DEACTIVATED':
+        return 'DEACTIVATED';
+      case 'PENDING':
+        return 'PENDING';
+      case 'REJECTED':
+        return 'REJECTED';
+      default:
+        return status;
+    }
+  };
+
+  const getStatusBadgeClass = (status: string): string => {
+    switch (status) {
+      case 'APPROVED':
+      case 'ACTIVE':
+        return 'status-approved';
+      case 'PENDING':
+        return 'status-pending';
+      case 'REJECTED':
+        return 'status-rejected';
+      case 'DISABLED':
+      case 'DEACTIVATED':
+        return 'status-disabled';
+      default:
+        return '';
+    }
+  };
+
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
       year: 'numeric',
@@ -342,6 +422,7 @@ const MasterAdminStaffPage = () => {
                         <th>Designation</th>
                         <th>Approved Date</th>
                         <th>Status</th>
+                        <th>Actions</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -355,9 +436,31 @@ const MasterAdminStaffPage = () => {
                           <td>{staff.designation || '--'}</td>
                           <td>{formatDate(staff.createdAt)}</td>
                           <td>
-                            <span className="status-badge status-approved">
-                              {staff.status}
+                            <span className={`status-badge ${getStatusBadgeClass(staff.status)}`}>
+                              {getStatusDisplay(staff.status)}
                             </span>
+                          </td>
+                          <td>
+                            <div className="action-buttons">
+                              {(staff.status === 'APPROVED' || staff.status === 'ACTIVE') && (
+                                <button
+                                  onClick={() => handleDeactivate(staff.id, staff.name)}
+                                  disabled={processingId === staff.id}
+                                  className="reject-button"
+                                >
+                                  {processingId === staff.id ? 'Processing...' : 'Deactivate'}
+                                </button>
+                              )}
+                              {(staff.status === 'DISABLED' || staff.status === 'DEACTIVATED') && (
+                                <button
+                                  onClick={() => handleActivate(staff.id, staff.name)}
+                                  disabled={processingId === staff.id}
+                                  className="approve-button"
+                                >
+                                  {processingId === staff.id ? 'Processing...' : 'Activate'}
+                                </button>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       ))}

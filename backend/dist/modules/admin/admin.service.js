@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, lte, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lte, sql } from "drizzle-orm";
 import { randomBytes } from "crypto";
 import { db } from "../../db/connection.js";
 import { attendance } from "../../db/schema/attendance.js";
@@ -56,7 +56,7 @@ export async function getStaffList(authUser) {
             status: users.status,
         })
             .from(users)
-            .where(and(eq(users.companyId, authUser.companyId), eq(users.departmentId, authUser.departmentId), eq(users.role, "STAFF"), eq(users.status, "APPROVED"), eq(users.isDeleted, false)));
+            .where(and(eq(users.companyId, authUser.companyId), eq(users.departmentId, authUser.departmentId), eq(users.role, "STAFF"), inArray(users.status, ["APPROVED", "DISABLED"]), eq(users.isDeleted, false)));
     }
     if (authUser.role === "MASTER_ADMIN") {
         return db
@@ -98,7 +98,7 @@ export async function getApprovedStaff(authUser) {
     })
         .from(users)
         .leftJoin(departments, eq(users.departmentId, departments.id))
-        .where(and(eq(users.companyId, authUser.companyId), eq(users.role, "STAFF"), eq(users.status, "APPROVED"), eq(users.isDeleted, false)));
+        .where(and(eq(users.companyId, authUser.companyId), eq(users.role, "STAFF"), inArray(users.status, ["APPROVED", "DISABLED"]), eq(users.isDeleted, false)));
 }
 export async function getAdminAttendance(authUser, reportType, date, month, year, startDate, endDate, employeeId, page, limit) {
     if (!authUser.companyId) {

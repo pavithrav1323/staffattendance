@@ -239,6 +239,40 @@ const ProgramOwnerMasterAdmins = () => {
     }
   };
 
+  const getStatusDisplay = (status: string): string => {
+    switch (status) {
+      case 'APPROVED':
+      case 'ACTIVE':
+        return 'ACTIVE';
+      case 'DISABLED':
+      case 'DEACTIVATED':
+        return 'DEACTIVATED';
+      case 'PENDING':
+        return 'PENDING';
+      case 'REJECTED':
+        return 'REJECTED';
+      default:
+        return status;
+    }
+  };
+
+  const getStatusBadgeClass = (status: string): string => {
+    switch (status) {
+      case 'APPROVED':
+      case 'ACTIVE':
+        return 'status-approved';
+      case 'PENDING':
+        return 'status-pending';
+      case 'REJECTED':
+        return 'status-rejected';
+      case 'DISABLED':
+      case 'DEACTIVATED':
+        return 'status-disabled';
+      default:
+        return '';
+    }
+  };
+
   const handlePhoneChange = (value: string) => {
     const digits = value.replace(/\D/g, '');
     const max = getPhoneMaxLength(selectedCountry.code);
@@ -468,14 +502,14 @@ const ProgramOwnerMasterAdmins = () => {
                     <td>{admin.phone || '--'}</td>
                     <td>{admin.companyCode || '--'}</td>
                     <td>
-                      <span className={`status-badge ${admin.status === 'APPROVED' ? 'status-approved' : 'status-rejected'}`}>
-                        {admin.status}
+                      <span className={`status-badge ${getStatusBadgeClass(admin.status)}`}>
+                        {getStatusDisplay(admin.status)}
                       </span>
                     </td>
                     <td>{new Date(admin.createdAt).toLocaleDateString()}</td>
                     <td>
                       <div className="action-buttons">
-                        {admin.status === 'APPROVED' ? (
+                        {(admin.status === 'APPROVED' || admin.status === 'ACTIVE') ? (
                           <>
                             <button
                               onClick={() => handleDelete(admin.id)}

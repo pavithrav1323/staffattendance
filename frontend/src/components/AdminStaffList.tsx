@@ -31,8 +31,6 @@ const AdminStaffList = ({ refreshKey }: AdminStaffListProps) => {
   const [resetError, setResetError] = useState<string | null>(null);
   const [resetSuccess, setResetSuccess] = useState<string | null>(null);
 
-  const [resetToken, setResetToken] = useState<string | null>(null);
-  const [resetTokenExpiry, setResetTokenExpiry] = useState<string | null>(null);
   const [resettingStaffId, setResettingStaffId] = useState<string | null>(null);
 
   const loadStaff = async () => {
@@ -73,15 +71,34 @@ const AdminStaffList = ({ refreshKey }: AdminStaffListProps) => {
     loadStaff();
   }, [refreshKey]);
 
+  const getStatusDisplay = (status: string): string => {
+    switch (status) {
+      case 'APPROVED':
+      case 'ACTIVE':
+        return 'ACTIVE';
+      case 'DISABLED':
+      case 'DEACTIVATED':
+        return 'DEACTIVATED';
+      case 'PENDING':
+        return 'PENDING';
+      case 'REJECTED':
+        return 'REJECTED';
+      default:
+        return status;
+    }
+  };
+
   const getStatusBadgeClass = (status: string): string => {
     switch (status) {
       case 'APPROVED':
+      case 'ACTIVE':
         return 'status-approved';
       case 'PENDING':
         return 'status-pending';
       case 'REJECTED':
         return 'status-rejected';
       case 'DISABLED':
+      case 'DEACTIVATED':
         return 'status-disabled';
       default:
         return '';
@@ -94,11 +111,15 @@ const AdminStaffList = ({ refreshKey }: AdminStaffListProps) => {
     try {
       setMessage(null);
       setError(null);
+      setStaff((prev) =>
+        prev.map((s) => (s.id === staffId ? { ...s, status: 'APPROVED' } : s))
+      );
       await adminService.activateStaff(staffId);
       setMessage('Staff activated successfully');
       loadStaff();
     } catch (err: any) {
       setError(err.message || 'Failed to activate staff');
+      loadStaff();
     }
   };
 
@@ -108,11 +129,15 @@ const AdminStaffList = ({ refreshKey }: AdminStaffListProps) => {
     try {
       setMessage(null);
       setError(null);
+      setStaff((prev) =>
+        prev.map((s) => (s.id === staffId ? { ...s, status: 'DISABLED' } : s))
+      );
       await adminService.deactivateStaff(staffId);
       setMessage('Staff deactivated successfully');
       loadStaff();
     } catch (err: any) {
       setError(err.message || 'Failed to deactivate staff');
+      loadStaff();
     }
   };
 
@@ -176,26 +201,22 @@ const AdminStaffList = ({ refreshKey }: AdminStaffListProps) => {
       return;
     }
 
-    if (!window.confirm(`Allow ${name} to login from another device? The Staff user will need to use the reset token to enroll their new device before logging in again.`)) return;
+    if (!window.confirm(`Allow ${name} to log in from another device? They will have 5 minutes to complete login on the new device.`)) return;
 
     setResettingStaffId(staffId);
     setMessage(null);
     setError(null);
-    setResetToken(null);
-    setResetTokenExpiry(null);
 
     try {
       const response = await adminService.resetStaffDevice(staffId);
-      if (response.success && response.data) {
-        setMessage(`Device reset enabled for 5 minutes for ${name}. Staff must use the reset token to login from the new device.`);
-        setResetToken(response.data.resetToken);
-        setResetTokenExpiry(new Date(response.data.expiresAt).toLocaleString());
+      if (response.success) {
+        setMessage(`Device access allowed for 5 minutes for ${name}. They can now log in from a new device within this window.`);
       } else {
-        setMessage(response.message || 'Registered device reset successfully');
+        setMessage(response.message || 'Device access allowed successfully');
       }
       loadStaff();
     } catch (err: any) {
-      setError(err.message || 'Failed to reset device');
+      setError(err.message || 'Failed to allow new device');
     } finally {
       setResettingStaffId(null);
     }
@@ -224,19 +245,7 @@ const AdminStaffList = ({ refreshKey }: AdminStaffListProps) => {
       {message && (
         <div className="success-message">
           {message}
-          <button onClick={() => { setMessage(null); setResetToken(null); setResetTokenExpiry(null); }} className="close-button">×</button>
-        </div>
-      )}
-
-      {resetToken && (
-        <div className="success-message" style={{ whiteSpace: 'pre-wrap' }}>
-          <strong>Reset Token:</strong> {resetToken}
-          {resetTokenExpiry && (
-            <div><strong>Expires At:</strong> {resetTokenExpiry}</div>
-          )}
-          <div style={{ fontSize: '0.85rem', marginTop: '0.5rem' }}>
-            Share this token with the staff. It can be used only once and expires in 5 minutes.
-          </div>
+          <button onClick={() => { setMessage(null); }} className="close-button">×</button>
         </div>
       )}
 
@@ -281,12 +290,12 @@ const AdminStaffList = ({ refreshKey }: AdminStaffListProps) => {
                         <td>{staffMember.designation || '--'}</td>
                         <td>
                           <span className={`status-badge ${getStatusBadgeClass(staffMember.status)}`}>
-                            {staffMember.status}
+                            {getStatusDisplay(staffMember.status)}
                           </span>
                         </td>
                         <td className="staff-actions-column">
                           <div className="staff-actions">
-                            {staffMember.status === 'APPROVED' && (
+                            {(staffMember.status === 'APPROVED' || staffMember.status === 'ACTIVE') && (
                               <button
                                 onClick={() => handleDeactivate(staffMember.id, staffMember.name)}
                                 className="action-btn action-btn-deactivate"
@@ -295,7 +304,7 @@ const AdminStaffList = ({ refreshKey }: AdminStaffListProps) => {
                                 Deactivate
                               </button>
                             )}
-                            {staffMember.status === 'DISABLED' && (
+                            {(staffMember.status === 'DISABLED' || staffMember.status === 'DEACTIVATED') && (
                               <button
                                 onClick={() => handleActivate(staffMember.id, staffMember.name)}
                                 className="action-btn action-btn-activate"

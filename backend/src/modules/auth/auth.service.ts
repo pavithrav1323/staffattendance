@@ -284,6 +284,14 @@ export async function login(input: LoginInput) {
       .where(eq(users.id, user.id));
   }
 
+  if (user.status === "DISABLED") {
+    throw new AppError(
+      403,
+      "Your account is currently deactivated. Please contact your administrator.",
+      "ACCOUNT_DEACTIVATED"
+    );
+  }
+
   if (user.status !== "APPROVED") {
     if (
       user.role === "STAFF" &&
@@ -337,7 +345,7 @@ export async function login(input: LoginInput) {
     throw new AppError(403, "Account is not approved");
   }
 
-  if (user.role === "STAFF") {
+  if (user.role === "STAFF" || user.role === "ADMIN" || user.role === "MASTER_ADMIN") {
     const incomingHash = input.deviceToken
       ? hashDeviceToken(input.deviceToken)
       : null;
@@ -362,31 +370,28 @@ export async function login(input: LoginInput) {
     } else if (incomingHash) {
       const now = new Date();
 
-      const [resetRecord] = await db
+      const [approvalRecord] = await db
         .select({
-          deviceResetToken: users.deviceResetToken,
+          deviceResetAllowed: users.deviceResetAllowed,
           deviceResetExpiry: users.deviceResetExpiry,
-          deviceResetUsed: users.deviceResetUsed,
         })
         .from(users)
         .where(
           and(
             eq(users.id, user.id),
-            eq(users.deviceResetUsed, false),
-            gte(users.deviceResetExpiry, now)
+            eq(users.deviceResetAllowed, true)
           )
         )
         .limit(1);
 
-      const isValidResetToken =
-        Boolean(resetRecord) &&
-        Boolean(resetRecord?.deviceResetToken) &&
-        Boolean(resetRecord?.deviceResetExpiry) &&
-        Boolean(input.deviceResetToken) &&
-        input.deviceResetToken === resetRecord?.deviceResetToken;
+      const hasValidApproval =
+        Boolean(approvalRecord) &&
+        approvalRecord.deviceResetExpiry !== null &&
+        approvalRecord.deviceResetExpiry !== undefined &&
+        new Date(approvalRecord.deviceResetExpiry) > now;
 
-      if (isValidResetToken) {
-        // Valid reset window with matching token: allow new device, invalidate old device, consume reset
+      if (hasValidApproval) {
+        // Valid admin approval window: allow new device, invalidate old device, consume approval
         if (activeDevice) {
           await db
             .update(staffDevices)
@@ -411,25 +416,23 @@ export async function login(input: LoginInput) {
         await db
           .update(users)
           .set({
-            deviceResetToken: null,
+            deviceResetAllowed: false,
             deviceResetExpiry: null,
-            deviceResetRequestedAt: null,
-            deviceResetUsed: true,
             updatedAt: new Date(),
           })
           .where(eq(users.id, user.id));
+      } else if (
+        approvalRecord &&
+        approvalRecord.deviceResetAllowed &&
+        (!approvalRecord.deviceResetExpiry || new Date(approvalRecord.deviceResetExpiry) <= now)
+      ) {
+        throw new AppError(
+          403,
+          "Device access approval expired. Please contact administrator.",
+          "DEVICE_APPROVAL_EXPIRED"
+        );
       } else {
-        // No valid reset or token mismatch
-        await db
-          .insert(staffDevices)
-          .values({
-            userId: user.id,
-            tokenHash: incomingHash,
-            deviceName: "Unknown",
-            userAgent: "",
-            status: "PENDING",
-          });
-
+        // No valid approval
         throw new AppError(
           403,
           "Device authorization required.",
@@ -541,8 +544,16 @@ export async function refreshAccessToken(
     throw new AppError(401, "User not found");
   }
 
+  if (user.status === "DISABLED") {
+    throw new AppError(
+      403,
+      "Your account has been deactivated. Please contact your administrator.",
+      "ACCOUNT_DEACTIVATED"
+    );
+  }
+
   if (user.status !== "APPROVED") {
-    throw new AppError(403, "Account is not approved");
+    throw new AppError(403, "Account is not active", "ACCOUNT_NOT_ACTIVE");
   }
 
   const accessToken = createAccessToken({

@@ -5,7 +5,7 @@ import { requireCompanyContext } from "../middleware/tenant.middleware.js";
 import { validateBody } from "../middleware/validate.middleware.js";
 import { createAdminSchema, createDepartmentSchema, } from "../modules/master-admin/master-admin.schema.js";
 import { activateAdmin, createAdmin, createDepartment, deactivateAdmin, deleteAdmin, deleteDepartment, getAdmins, getDepartments, getMasterAdminAttendance, getMasterAdminAttendanceExport, } from "../modules/master-admin/master-admin.service.js";
-import { getAdminAttendanceSummary, getApprovedStaff, getMasterAdminDashboardStats, getPendingStaff, approveStaff, rejectStaff, } from "../modules/admin/admin.service.js";
+import { getAdminAttendanceSummary, getApprovedStaff, getMasterAdminDashboardStats, getPendingStaff, approveStaff, rejectStaff, activateStaff, deactivateStaff, } from "../modules/admin/admin.service.js";
 const router = Router();
 const masterAdminAccess = [
     authenticateToken,
@@ -301,6 +301,40 @@ router.patch("/staff/:id/reject", ...masterAdminAccess, async (req, res, next) =
         res.status(200).json({
             success: true,
             message: "Staff registration rejected.",
+            data,
+        });
+    }
+    catch (error) {
+        next(error);
+    }
+});
+/**
+ * PATCH /api/master-admin/staff/:id/activate
+ */
+router.patch("/staff/:id/activate", ...masterAdminAccess, async (req, res, next) => {
+    try {
+        const staffId = String(req.params.id);
+        const data = await activateStaff(req.user, staffId);
+        res.status(200).json({
+            success: true,
+            message: "Staff activated successfully.",
+            data,
+        });
+    }
+    catch (error) {
+        next(error);
+    }
+});
+/**
+ * PATCH /api/master-admin/staff/:id/deactivate
+ */
+router.patch("/staff/:id/deactivate", ...masterAdminAccess, async (req, res, next) => {
+    try {
+        const staffId = String(req.params.id);
+        const data = await deactivateStaff(req.user, staffId);
+        res.status(200).json({
+            success: true,
+            message: "Staff deactivated successfully.",
             data,
         });
     }

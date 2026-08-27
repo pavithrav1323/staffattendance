@@ -283,4 +283,12 @@ export const masterAdminService = {
   getApprovedStaff: async (): Promise<{ success: boolean; data?: ApprovedStaff[] }> => {
     return apiRequest('/master-admin/staff/approved', 'GET');
   },
+
+  activateStaff: async (staffId: string): Promise<CreateResponse> => {
+    return apiRequest(`/master-admin/staff/${staffId}/activate`, 'PATCH');
+  },
+
+  deactivateStaff: async (staffId: string): Promise<CreateResponse> => {
+    return apiRequest(`/master-admin/staff/${staffId}/deactivate`, 'PATCH');
+  },
 };

@@ -228,9 +228,44 @@ const MasterAdminAdmins = ({ admins, departments, onSuccess, onDepartmentCreated
     }
   };
 
-  const getDepartmentName = (deptId: string): string => {
-    const dept = departments.find(d => d.id === deptId);
-    return dept?.name || '--';
+  const getDepartmentName = (deptId: string | null) => {
+    if (!deptId) return '--';
+    const dept = departments.find((d) => d.id === deptId);
+    return dept ? dept.name : '--';
+  };
+
+  const getStatusDisplay = (status: string): string => {
+    switch (status) {
+      case 'APPROVED':
+      case 'ACTIVE':
+        return 'ACTIVE';
+      case 'DISABLED':
+      case 'DEACTIVATED':
+        return 'DEACTIVATED';
+      case 'PENDING':
+        return 'PENDING';
+      case 'REJECTED':
+        return 'REJECTED';
+      default:
+        return status;
+    }
+  };
+
+  const getStatusBadgeClass = (status: string): string => {
+    switch (status) {
+      case 'APPROVED':
+      case 'ACTIVE':
+        return 'status-approved';
+      case 'PENDING':
+        return 'status-pending';
+      case 'REJECTED':
+        return 'status-rejected';
+      case 'DISABLED':
+      case 'DEACTIVATED':
+        return 'status-disabled';
+      default:
+        return '';
+    }
   };
 
   const handleDelete = async (id: string) => {
@@ -522,13 +557,13 @@ const MasterAdminAdmins = ({ admins, departments, onSuccess, onDepartmentCreated
                   <td>{getDepartmentName(admin.departmentId)}</td>
                   <td>{admin.designation || '--'}</td>
                   <td>
-                    <span className={`status-badge ${admin.status === 'APPROVED' ? 'status-approved' : admin.status === 'DISABLED' ? 'status-disabled' : 'status-pending'}`}>
-                      {admin.status}
+                    <span className={`status-badge ${getStatusBadgeClass(admin.status)}`}>
+                      {getStatusDisplay(admin.status)}
                     </span>
                   </td>
                   <td className="staff-actions-column">
                     <div className="staff-actions">
-                      {admin.status !== 'APPROVED' ? (
+                      {(admin.status === 'DISABLED' || admin.status === 'DEACTIVATED') ? (
                         <button
                           onClick={() => handleActivate(admin.id)}
                           disabled={loading}

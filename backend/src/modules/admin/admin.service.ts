@@ -1,5 +1,4 @@
-import { and, desc, eq, gte, lte, sql } from "drizzle-orm";
-import { randomBytes } from "crypto";
+import { and, desc, eq, gte, inArray, lte, sql } from "drizzle-orm";
 import { db } from "../../db/connection.js";
 import { attendance } from "../../db/schema/attendance.js";
 import { companies } from "../../db/schema/companies.js";
@@ -96,7 +95,7 @@ export async function getStaffList(
           eq(users.companyId, authUser.companyId),
           eq(users.departmentId, authUser.departmentId),
           eq(users.role, "STAFF"),
-          eq(users.status, "APPROVED"),
+          inArray(users.status, ["APPROVED", "DISABLED"]),
           eq(users.isDeleted, false)
         )
       );
@@ -161,7 +160,7 @@ export async function getApprovedStaff(
       and(
         eq(users.companyId, authUser.companyId),
         eq(users.role, "STAFF"),
-        eq(users.status, "APPROVED"),
+        inArray(users.status, ["APPROVED", "DISABLED"]),
         eq(users.isDeleted, false)
       )
     );
@@ -1020,63 +1019,19 @@ export async function resetStaffDevice(
   const now = new Date();
   const expiry = new Date(now.getTime() + 5 * 60 * 1000);
 
-  // Check if an unused, non-expired reset token already exists for this staff
-  const [existingUser] = await db
-    .select({
-      deviceResetToken: users.deviceResetToken,
-      deviceResetUsed: users.deviceResetUsed,
-      deviceResetExpiry: users.deviceResetExpiry,
-    })
-    .from(users)
-    .where(
-      and(
-        eq(users.id, staffId),
-        eq(users.deviceResetUsed, false),
-        gte(users.deviceResetExpiry, now)
-      )
-    )
-    .limit(1);
-
-  if (existingUser && existingUser.deviceResetToken) {
-    await db
-      .update(users)
-      .set({
-        deviceResetExpiry: expiry,
-        deviceResetRequestedAt: now,
-        updatedAt: now,
-      })
-      .where(eq(users.id, staffId));
-
-    return {
-      success: true,
-      message: "Device access already allowed and timer refreshed.",
-      data: {
-        resetToken: existingUser.deviceResetToken,
-        employeeId: staff.employeeId,
-        expiresAt: expiry,
-      },
-    };
-  }
-
-  // Generate a unique one-time reset token valid for 5 minutes
-  const resetToken = randomBytes(32).toString("hex");
-
   await db
     .update(users)
     .set({
-      deviceResetToken: resetToken,
-      deviceResetRequestedAt: now,
+      deviceResetAllowed: true,
       deviceResetExpiry: expiry,
-      deviceResetUsed: false,
       updatedAt: now,
     })
     .where(eq(users.id, staffId));
 
   return {
     success: true,
-    message: "Device reset enabled for 5 minutes",
+    message: "Device access allowed for 5 minutes",
     data: {
-      resetToken,
       employeeId: staff.employeeId,
       expiresAt: expiry,
     },

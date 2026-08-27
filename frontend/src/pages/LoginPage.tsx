@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { authService } from '../services/auth.service';
 import { ApiError } from '../services/api';
@@ -15,14 +15,20 @@ interface PendingApprovalData {
 const LoginPage = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [deviceResetToken, setDeviceResetToken] = useState('');
-  const [showResetTokenInput, setShowResetTokenInput] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pendingApproval, setPendingApproval] = useState<PendingApprovalData | null>(null);
   const [rejectedData, setRejectedData] = useState<PendingApprovalData | null>(null);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    const deactivationMsg = sessionStorage.getItem('deactivationError');
+    if (deactivationMsg) {
+      setError(deactivationMsg);
+      sessionStorage.removeItem('deactivationError');
+    }
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -55,8 +61,7 @@ const LoginPage = () => {
       setRejectedData(null);
       const user = await authService.login(
         trimmedEmail,
-        trimmedPassword,
-        deviceResetToken.trim() || undefined
+        trimmedPassword
       );
       
       if (user.mustChangePassword) {
@@ -80,11 +85,10 @@ const LoginPage = () => {
         setPendingApproval({ admin: err.data?.admin || null });
       } else if (err instanceof ApiError && err.code === 'STAFF_ACCOUNT_REJECTED') {
         setRejectedData({ admin: err.data?.admin || null });
-      } else if (err instanceof ApiError && err.code === 'STAFF_DEVICE_NOT_REGISTERED') {
-        setShowResetTokenInput(true);
-        setError('Device authorization required. If your Admin allowed this device, enter the 5-minute Reset Token below.');
       } else if (err instanceof ApiError && err.code === 'ACCOUNT_LOCKED') {
         setError('Account temporarily locked due to repeated failed attempts. Please try again in 15 minutes.');
+      } else if (err instanceof ApiError && (err.code === 'ACCOUNT_DEACTIVATED' || err.statusCode === 403)) {
+        setError(err.message || 'Your account is currently deactivated. Please contact your administrator.');
       } else {
         setError(err.message || 'Login failed');
       }
@@ -206,39 +210,6 @@ const LoginPage = () => {
               </button>
             </div>
           </div>
-
-          {showResetTokenInput ? (
-            <div className="form-group">
-              <label htmlFor="deviceResetToken">
-                Device Reset Token <span style={{ fontSize: '0.8rem', color: '#666' }}>(from Admin)</span>
-              </label>
-              <input
-                type="text"
-                id="deviceResetToken"
-                value={deviceResetToken}
-                onChange={(e) => setDeviceResetToken(e.target.value)}
-                disabled={loading}
-                placeholder="Enter 64-character reset token"
-              />
-            </div>
-          ) : (
-            <div style={{ textAlign: 'right', marginBottom: '1rem', marginTop: '-0.5rem' }}>
-              <button
-                type="button"
-                onClick={() => setShowResetTokenInput(true)}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  color: '#2563eb',
-                  fontSize: '0.85rem',
-                  cursor: 'pointer',
-                  textDecoration: 'underline',
-                }}
-              >
-                Using a new device? Enter Reset Token
-              </button>
-            </div>
-          )}
 
           <button type="submit" disabled={loading} className="login-button">
             {loading ? 'Logging in...' : 'Login'}
