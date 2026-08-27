@@ -345,7 +345,7 @@ export async function login(input: LoginInput) {
     throw new AppError(403, "Account is not approved");
   }
 
-  if (user.role === "STAFF" || user.role === "ADMIN" || user.role === "MASTER_ADMIN") {
+  if (user.role === "STAFF") {
     const incomingHash = input.deviceToken
       ? hashDeviceToken(input.deviceToken)
       : null;
@@ -435,14 +435,14 @@ export async function login(input: LoginInput) {
         // No valid approval
         throw new AppError(
           403,
-          "Device authorization required.",
+          "Device not registered. Please contact your admin for approval.",
           "STAFF_DEVICE_NOT_REGISTERED"
         );
       }
     } else {
       throw new AppError(
         403,
-        "Device authorization required.",
+        "Device not registered. Please contact your admin for approval.",
         "STAFF_DEVICE_NOT_REGISTERED"
       );
     }
