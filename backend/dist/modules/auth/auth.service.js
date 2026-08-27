@@ -1,4 +1,4 @@
-import { and, eq, gte, ilike } from "drizzle-orm";
+import { and, eq, ilike } from "drizzle-orm";
 import { db } from "../../db/connection.js";
 import { companies } from "../../db/schema/companies.js";
 import { departments } from "../../db/schema/departments.js";
@@ -150,12 +150,12 @@ export async function login(input) {
     }
     // Account-level lockout check
     if (user.lockedUntil && new Date(user.lockedUntil) > new Date()) {
-        throw new AppError(429, "Account temporarily locked. Try again later.", "ACCOUNT_LOCKED");
+        throw new AppError(429, "Too many login attempts. Please try again later.", "ACCOUNT_LOCKED");
     }
     const passwordMatches = await comparePassword(input.password, user.passwordHash);
     if (!passwordMatches) {
         const newAttempts = (user.failedLoginAttempts || 0) + 1;
-        const isLocked = newAttempts >= 5;
+        const isLocked = newAttempts >= 15;
         const lockedUntil = isLocked ? new Date(Date.now() + 15 * 60 * 1000) : null;
         await db
             .update(users)
@@ -214,7 +214,7 @@ export async function login(input) {
         }
         throw new AppError(403, "Account is not approved");
     }
-    if (user.role === "STAFF") {
+    if (user.role === "STAFF" || user.role === "ADMIN" || user.role === "MASTER_ADMIN") {
         const incomingHash = input.deviceToken
             ? hashDeviceToken(input.deviceToken)
             : null;
@@ -232,22 +232,20 @@ export async function login(input) {
         }
         else if (incomingHash) {
             const now = new Date();
-            const [resetRecord] = await db
+            const [approvalRecord] = await db
                 .select({
-                deviceResetToken: users.deviceResetToken,
+                deviceResetAllowed: users.deviceResetAllowed,
                 deviceResetExpiry: users.deviceResetExpiry,
-                deviceResetUsed: users.deviceResetUsed,
             })
                 .from(users)
-                .where(and(eq(users.id, user.id), eq(users.deviceResetUsed, false), gte(users.deviceResetExpiry, now)))
+                .where(and(eq(users.id, user.id), eq(users.deviceResetAllowed, true)))
                 .limit(1);
-            const isValidResetToken = Boolean(resetRecord) &&
-                Boolean(resetRecord?.deviceResetToken) &&
-                Boolean(resetRecord?.deviceResetExpiry) &&
-                Boolean(input.deviceResetToken) &&
-                input.deviceResetToken === resetRecord?.deviceResetToken;
-            if (isValidResetToken) {
-                // Valid reset window with matching token: allow new device, invalidate old device, consume reset
+            const hasValidApproval = Boolean(approvalRecord) &&
+                approvalRecord.deviceResetExpiry !== null &&
+                approvalRecord.deviceResetExpiry !== undefined &&
+                new Date(approvalRecord.deviceResetExpiry) > now;
+            if (hasValidApproval) {
+                // Valid admin approval window: allow new device, invalidate old device, consume approval
                 if (activeDevice) {
                     await db
                         .update(staffDevices)
@@ -270,25 +268,19 @@ export async function login(input) {
                 await db
                     .update(users)
                     .set({
-                    deviceResetToken: null,
+                    deviceResetAllowed: false,
                     deviceResetExpiry: null,
-                    deviceResetRequestedAt: null,
-                    deviceResetUsed: true,
                     updatedAt: new Date(),
                 })
                     .where(eq(users.id, user.id));
             }
+            else if (approvalRecord &&
+                approvalRecord.deviceResetAllowed &&
+                (!approvalRecord.deviceResetExpiry || new Date(approvalRecord.deviceResetExpiry) <= now)) {
+                throw new AppError(403, "Device access approval expired. Please contact administrator.", "DEVICE_APPROVAL_EXPIRED");
+            }
             else {
-                // No valid reset or token mismatch
-                await db
-                    .insert(staffDevices)
-                    .values({
-                    userId: user.id,
-                    tokenHash: incomingHash,
-                    deviceName: "Unknown",
-                    userAgent: "",
-                    status: "PENDING",
-                });
+                // No valid approval
                 throw new AppError(403, "Device authorization required.", "STAFF_DEVICE_NOT_REGISTERED");
             }
         }

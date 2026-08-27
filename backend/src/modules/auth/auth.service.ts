@@ -237,7 +237,7 @@ export async function login(input: LoginInput) {
   if (user.lockedUntil && new Date(user.lockedUntil) > new Date()) {
     throw new AppError(
       429,
-      "Account temporarily locked. Try again later.",
+      "Too many login attempts. Please try again later.",
       "ACCOUNT_LOCKED"
     );
   }
@@ -249,7 +249,7 @@ export async function login(input: LoginInput) {
 
   if (!passwordMatches) {
     const newAttempts = (user.failedLoginAttempts || 0) + 1;
-    const isLocked = newAttempts >= 5;
+    const isLocked = newAttempts >= 15;
     const lockedUntil = isLocked ? new Date(Date.now() + 15 * 60 * 1000) : null;
 
     await db
