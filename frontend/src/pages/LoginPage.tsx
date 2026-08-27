@@ -86,7 +86,7 @@ const LoginPage = () => {
       } else if (err instanceof ApiError && err.code === 'STAFF_ACCOUNT_REJECTED') {
         setRejectedData({ admin: err.data?.admin || null });
       } else if (err instanceof ApiError && err.code === 'ACCOUNT_LOCKED') {
-        setError('Account temporarily locked due to repeated failed attempts. Please try again in 15 minutes.');
+        setError('Too many login attempts. Please try again later.');
       } else if (err instanceof ApiError && (err.code === 'ACCOUNT_DEACTIVATED' || err.statusCode === 403)) {
         setError(err.message || 'Your account is currently deactivated. Please contact your administrator.');
       } else {

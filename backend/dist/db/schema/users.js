@@ -41,10 +41,10 @@ export const users = pgTable("users", {
     deviceResetRequestedAt: timestamp("device_reset_requested_at", {
         withTimezone: true,
     }),
+    deviceResetAllowed: boolean("device_reset_allowed").default(false),
     deviceResetExpiry: timestamp("device_reset_expiry", {
         withTimezone: true,
     }),
-    deviceResetUsed: boolean("device_reset_used").default(false),
     failedLoginAttempts: integer("failed_login_attempts")
         .notNull()
         .default(0),
