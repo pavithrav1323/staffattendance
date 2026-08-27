@@ -181,6 +181,9 @@ export async function login(input) {
         })
             .where(eq(users.id, user.id));
     }
+    if (user.status === "DISABLED") {
+        throw new AppError(403, "Your account is currently deactivated. Please contact your administrator.", "ACCOUNT_DEACTIVATED");
+    }
     if (user.status !== "APPROVED") {
         if (user.role === "STAFF" &&
             (user.status === "PENDING" || user.status === "REJECTED") &&
@@ -368,8 +371,11 @@ export async function refreshAccessToken(input) {
     if (!user) {
         throw new AppError(401, "User not found");
     }
+    if (user.status === "DISABLED") {
+        throw new AppError(403, "Your account has been deactivated. Please contact your administrator.", "ACCOUNT_DEACTIVATED");
+    }
     if (user.status !== "APPROVED") {
-        throw new AppError(403, "Account is not approved");
+        throw new AppError(403, "Account is not active", "ACCOUNT_NOT_ACTIVE");
     }
     const accessToken = createAccessToken({
         userId: user.id,

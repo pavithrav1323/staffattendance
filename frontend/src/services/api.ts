@@ -164,6 +164,22 @@ const apiRequest = async <T = unknown>(
       }
 
       const error = await parseError(response);
+
+      if (
+        endpoint !== '/auth/login' &&
+        response.status === 403 &&
+        (error.code === 'ACCOUNT_DEACTIVATED' || error.message.toLowerCase().includes('deactivated'))
+      ) {
+        clearSession();
+        sessionStorage.setItem(
+          'deactivationError',
+          error.message || 'Your account has been deactivated. Please contact your administrator.'
+        );
+        if (window.location.pathname !== '/login') {
+          window.location.href = '/login';
+        }
+      }
+
       throw error;
     }
 

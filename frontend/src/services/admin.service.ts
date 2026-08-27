@@ -42,7 +42,6 @@ interface DeletedStaffAttendanceResponse {
 }
 
 interface DeviceResetData {
-  resetToken: string;
   employeeId: string;
   expiresAt: string;
 }

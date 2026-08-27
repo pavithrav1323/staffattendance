@@ -72,11 +72,11 @@ export const users = pgTable(
       withTimezone: true,
     }),
 
+    deviceResetAllowed: boolean("device_reset_allowed").default(false),
+
     deviceResetExpiry: timestamp("device_reset_expiry", {
       withTimezone: true,
     }),
-
-    deviceResetUsed: boolean("device_reset_used").default(false),
 
     failedLoginAttempts: integer("failed_login_attempts")
       .notNull()
