@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, timestamp, index } from "drizzle-orm/pg-core";
 import { users } from "./users.js";
 export const refreshTokens = pgTable("refresh_tokens", {
     id: uuid("id").defaultRandom().primaryKey(),
@@ -19,5 +19,5 @@ export const refreshTokens = pgTable("refresh_tokens", {
     revokedAt: timestamp("revoked_at", {
         withTimezone: true,
     }),
-});
+}, (table) => [index("idx_refresh_tokens_token").on(table.token)]);
 //# sourceMappingURL=refresh-tokens.js.map

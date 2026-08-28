@@ -1,7 +1,10 @@
-import { and, eq, ilike } from "drizzle-orm";
+import { and, eq, ilike, inArray, sql } from "drizzle-orm";
 import { db } from "../../db/connection.js";
+import { attendance } from "../../db/schema/attendance.js";
 import { companies } from "../../db/schema/companies.js";
+import { departments } from "../../db/schema/departments.js";
 import { users } from "../../db/schema/users.js";
+import { workLocations } from "../../db/schema/work-locations.js";
 import { AppError } from "../../utils/app-error.js";
 import { hashPassword } from "../../utils/password.js";
 import { normalizeEmail, normalizeEmployeeId, normalizeCompanyCode, } from "../../utils/normalization.js";
@@ -175,5 +178,154 @@ export async function deleteMasterAdmin(_authUser, userId) {
     }
     await db.delete(users).where(eq(users.id, userId));
     return { success: true };
+}
+/**
+ * Get all companies with summary statistics
+ */
+export async function getCompanies(_authUser) {
+    const allCompanies = await db
+        .select({
+        id: companies.id,
+        companyCode: companies.companyCode,
+        companyName: companies.companyName,
+        email: companies.email,
+        phone: companies.phone,
+        isActive: companies.isActive,
+        createdAt: companies.createdAt,
+    })
+        .from(companies)
+        .orderBy(companies.companyName);
+    if (allCompanies.length === 0) {
+        return [];
+    }
+    const companyIds = allCompanies.map((c) => c.id);
+    const counts = await db
+        .select({
+        companyId: users.companyId,
+        masterAdminCount: sql `count(case when ${users.role} = 'MASTER_ADMIN' then 1 end)::int`.as("masterAdminCount"),
+        staffCount: sql `count(case when ${users.role} = 'STAFF' then 1 end)::int`.as("staffCount"),
+    })
+        .from(users)
+        .where(inArray(users.companyId, companyIds))
+        .groupBy(users.companyId);
+    const masterAdmins = await db
+        .select({
+        companyId: users.companyId,
+        name: users.name,
+        email: users.email,
+    })
+        .from(users)
+        .where(and(eq(users.role, "MASTER_ADMIN"), inArray(users.companyId, companyIds)))
+        .orderBy(users.createdAt);
+    const countMap = new Map(counts.map((c) => [
+        c.companyId,
+        { masterAdminCount: c.masterAdminCount, staffCount: c.staffCount },
+    ]));
+    const adminMap = new Map(masterAdmins.map((m) => [m.companyId, m]));
+    return allCompanies.map((company) => {
+        const stats = countMap.get(company.id) || {
+            masterAdminCount: 0,
+            staffCount: 0,
+        };
+        const admin = adminMap.get(company.id);
+        return {
+            ...company,
+            status: company.isActive ? "ACTIVE" : "INACTIVE",
+            masterAdminCount: stats.masterAdminCount,
+            staffCount: stats.staffCount,
+            adminName: admin?.name || null,
+            adminEmail: admin?.email || null,
+        };
+    });
+}
+/**
+ * Get detailed information for a single company
+ */
+export async function getCompanyDetails(_authUser, companyId) {
+    const [company] = await db
+        .select({
+        id: companies.id,
+        companyCode: companies.companyCode,
+        companyName: companies.companyName,
+        email: companies.email,
+        phone: companies.phone,
+        timezone: companies.timezone,
+        isActive: companies.isActive,
+        createdAt: companies.createdAt,
+    })
+        .from(companies)
+        .where(eq(companies.id, companyId))
+        .limit(1);
+    if (!company) {
+        throw new AppError(404, "Company not found");
+    }
+    const masterAdmins = await db
+        .select({
+        id: users.id,
+        employeeId: users.employeeId,
+        name: users.name,
+        email: users.email,
+        status: users.status,
+    })
+        .from(users)
+        .where(and(eq(users.companyId, companyId), eq(users.role, "MASTER_ADMIN")))
+        .orderBy(users.name);
+    const staffCount = await db
+        .select({
+        count: sql `count(*)::int`.as("count"),
+    })
+        .from(users)
+        .where(and(eq(users.companyId, companyId), eq(users.role, "STAFF")))
+        .then((rows) => rows[0]?.count || 0);
+    const departmentList = await db
+        .select({
+        id: departments.id,
+        name: departments.name,
+        code: departments.code,
+    })
+        .from(departments)
+        .where(eq(departments.companyId, companyId));
+    return {
+        company,
+        status: company.isActive ? "ACTIVE" : "INACTIVE",
+        admin: masterAdmins[0] || null,
+        masterAdmins,
+        staffCount,
+        departments: departmentList,
+    };
+}
+/**
+ * Permanently delete a company and all associated data
+ */
+export async function deleteCompany(_authUser, companyId) {
+    const [company] = await db
+        .select({ id: companies.id, companyName: companies.companyName })
+        .from(companies)
+        .where(eq(companies.id, companyId))
+        .limit(1);
+    if (!company) {
+        throw new AppError(404, "Company not found");
+    }
+    await db.transaction(async (tx) => {
+        await tx
+            .delete(attendance)
+            .where(eq(attendance.companyId, companyId));
+        await tx
+            .delete(users)
+            .where(eq(users.companyId, companyId));
+        await tx
+            .delete(workLocations)
+            .where(eq(workLocations.companyId, companyId));
+        await tx
+            .delete(departments)
+            .where(eq(departments.companyId, companyId));
+        await tx
+            .delete(companies)
+            .where(eq(companies.id, companyId));
+    });
+    return {
+        success: true,
+        message: "Company and all associated records deleted successfully",
+    };
 }
 //# sourceMappingURL=program-owner.service.js.map

@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, ilike, lte, sql } from "drizzle-orm";
+import { and, desc, eq, gte, ilike, inArray, lte, sql } from "drizzle-orm";
 
 import { db } from "../../db/connection.js";
 import { attendance } from "../../db/schema/attendance.js";
@@ -13,7 +13,11 @@ import {
   normalizeEmail,
   normalizeEmployeeId,
 } from "../../utils/normalization.js";
-import type { CreateAdminInput } from "./master-admin.schema.js";
+import type {
+  CreateAdminInput,
+  DeleteAttendanceRecordsInput,
+  DeleteStaffDataInput,
+} from "./master-admin.schema.js";
 import {
   getDateInTimeZone,
   getMonthBoundaries,
@@ -23,6 +27,7 @@ import {
   validateMonthFormat,
   validateYearFormat,
   formatTimeOnly,
+  parseTimeInZone,
 } from "../../utils/date.js";
 import { escapeCSVValue, generateCSVRow } from "../../utils/csv.js";
 type AuthUser = NonNullable<AuthRequest["user"]>;
@@ -957,4 +962,557 @@ async function getCurrentDatePart(
   if (part === "year") return currentDate.slice(0, 4);
   if (part === "month") return currentDate.slice(0, 7);
   return currentDate;
+}
+
+export async function updateMasterAdminAttendanceTime(
+  authUser: AuthUser,
+  attendanceId: string,
+  input: {
+    clockIn?: string;
+    clockOut?: string | null;
+    timezone?: string;
+  }
+) {
+  if (!authUser.companyId) {
+    throw new AppError(403, "Company context is required");
+  }
+
+  const [record] = await db
+    .select({
+      id: attendance.id,
+      companyId: attendance.companyId,
+      attendanceDate: attendance.attendanceDate,
+      clockInTime: attendance.clockInTime,
+      clockOutTime: attendance.clockOutTime,
+      attendanceStatus: attendance.attendanceStatus,
+      sessionStatus: attendance.sessionStatus,
+    })
+    .from(attendance)
+    .where(eq(attendance.id, attendanceId))
+    .limit(1);
+
+  if (!record) {
+    throw new AppError(404, "Attendance record not found");
+  }
+
+  if (record.companyId !== authUser.companyId) {
+    throw new AppError(403, "You do not have permission to edit this record");
+  }
+
+  const [company] = await db
+    .select({ timezone: companies.timezone })
+    .from(companies)
+    .where(eq(companies.id, authUser.companyId))
+    .limit(1);
+
+  const timeZone = input.timezone || company?.timezone;
+  if (!timeZone) {
+    throw new AppError(500, "Timezone not configured for this company");
+  }
+
+  let clockInDate = record.clockInTime;
+  let clockOutDate = record.clockOutTime;
+
+  try {
+    if (input.clockIn) {
+      clockInDate = parseTimeInZone(
+        record.attendanceDate,
+        input.clockIn,
+        timeZone
+      );
+    }
+
+    if (input.clockOut === null || input.clockOut === "") {
+      clockOutDate = null;
+    } else if (input.clockOut) {
+      clockOutDate = parseTimeInZone(
+        record.attendanceDate,
+        input.clockOut,
+        timeZone
+      );
+    }
+  } catch (error) {
+    throw new AppError(400, "Invalid time or timezone");
+  }
+
+  if (clockInDate && clockInDate.getTime() > Date.now()) {
+    throw new AppError(400, "Clock In cannot be a future time");
+  }
+
+  if (
+    clockInDate &&
+    clockOutDate &&
+    clockOutDate.getTime() < clockInDate.getTime()
+  ) {
+    throw new AppError(400, "Clock Out cannot be before Clock In");
+  }
+
+  let workingMinutes: number | null = null;
+  if (clockInDate && clockOutDate) {
+    workingMinutes = Math.max(
+      0,
+      Math.floor((clockOutDate.getTime() - clockInDate.getTime()) / 60000)
+    );
+  }
+
+  const sessionStatus = clockOutDate ? "CLOCKED_OUT" : "CLOCKED_IN";
+
+  const updateData: any = {
+    updatedAt: new Date(),
+  };
+
+  if (input.clockIn !== undefined) updateData.clockInTime = clockInDate;
+  if (input.clockOut !== undefined) updateData.clockOutTime = clockOutDate;
+  if (input.clockIn !== undefined || input.clockOut !== undefined) {
+    updateData.workingMinutes = workingMinutes;
+    updateData.sessionStatus = sessionStatus;
+  }
+
+  await db
+    .update(attendance)
+    .set(updateData)
+    .where(eq(attendance.id, attendanceId));
+
+  return {
+    success: true,
+    message: "Attendance time updated successfully",
+  };
+}
+
+export async function deleteMasterAdminStaffData(
+  authUser: AuthUser,
+  input: DeleteStaffDataInput
+) {
+  if (authUser.role !== "MASTER_ADMIN") {
+    throw new AppError(
+      403,
+      "Only MASTER_ADMIN can delete staff records"
+    );
+  }
+
+  if (!authUser.companyId) {
+    throw new AppError(403, "Company context is required");
+  }
+
+  if (input.companyId !== authUser.companyId) {
+    throw new AppError(
+      403,
+      "You do not have permission to delete records for this company"
+    );
+  }
+
+  if (input.departmentId) {
+    const [department] = await db
+      .select({ id: departments.id })
+      .from(departments)
+      .where(
+        and(
+          eq(departments.id, input.departmentId),
+          eq(departments.companyId, authUser.companyId)
+        )
+      )
+      .limit(1);
+
+    if (!department) {
+      throw new AppError(404, "Department not found");
+    }
+  }
+
+  const conditions: any[] = [eq(users.companyId, authUser.companyId)];
+
+  if (input.departmentId) {
+    conditions.push(eq(users.departmentId, input.departmentId));
+  }
+
+  if (input.employeeId) {
+    conditions.push(eq(users.employeeId, input.employeeId));
+  }
+
+  if (input.dateStart && input.dateEnd) {
+    if (input.dateStart > input.dateEnd) {
+      throw new AppError(
+        400,
+        "Start date cannot be after end date"
+      );
+    }
+
+    const start = new Date(`${input.dateStart}T00:00:00.000Z`);
+    const end = new Date(`${input.dateEnd}T23:59:59.999Z`);
+    conditions.push(gte(users.createdAt, start));
+    conditions.push(lte(users.createdAt, end));
+  }
+
+  const matched = await db
+    .select({
+      id: users.id,
+      employeeId: users.employeeId,
+      name: users.name,
+    })
+    .from(users)
+    .where(and(...conditions));
+
+  if (matched.length === 0) {
+    throw new AppError(
+      404,
+      "No staff records found matching the selected criteria"
+    );
+  }
+
+  const userIds = matched.map((m) => m.id);
+
+  await db.transaction(async (tx) => {
+    await tx
+      .delete(attendance)
+      .where(inArray(attendance.employeeId, userIds));
+
+    await tx.delete(users).where(inArray(users.id, userIds));
+  });
+
+  return {
+    success: true,
+    message: `${matched.length} staff record(s) deleted successfully`,
+  };
+}
+
+export async function getMasterAdminStaffDataPreview(
+  authUser: AuthUser,
+  input: DeleteStaffDataInput
+) {
+  if (authUser.role !== "MASTER_ADMIN") {
+    throw new AppError(403, "Only MASTER_ADMIN can preview staff records");
+  }
+
+  if (!authUser.companyId) {
+    throw new AppError(403, "Company context is required");
+  }
+
+  if (input.companyId !== authUser.companyId) {
+    throw new AppError(
+      403,
+      "You do not have permission to preview records for this company"
+    );
+  }
+
+  if (input.departmentId) {
+    const [department] = await db
+      .select({ id: departments.id })
+      .from(departments)
+      .where(
+        and(
+          eq(departments.id, input.departmentId),
+          eq(departments.companyId, authUser.companyId)
+        )
+      )
+      .limit(1);
+
+    if (!department) {
+      throw new AppError(404, "Department not found");
+    }
+  }
+
+  if (input.employeeId) {
+    const [staff] = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(
+        and(
+          eq(users.employeeId, input.employeeId),
+          eq(users.companyId, authUser.companyId)
+        )
+      )
+      .limit(1);
+
+    if (!staff) {
+      throw new AppError(404, "Staff member not found");
+    }
+  }
+
+  const conditions: any[] = [eq(users.companyId, authUser.companyId)];
+
+  if (input.departmentId) {
+    conditions.push(eq(users.departmentId, input.departmentId));
+  }
+
+  if (input.employeeId) {
+    conditions.push(eq(users.employeeId, input.employeeId));
+  }
+
+  if (input.dateStart && input.dateEnd) {
+    if (input.dateStart > input.dateEnd) {
+      throw new AppError(400, "Start date cannot be after end date");
+    }
+
+    const start = new Date(`${input.dateStart}T00:00:00.000Z`);
+    const end = new Date(`${input.dateEnd}T23:59:59.999Z`);
+
+    conditions.push(gte(users.createdAt, start));
+    conditions.push(lte(users.createdAt, end));
+  }
+
+  const records = await db
+    .select({
+      employeeId: users.employeeId,
+      employeeName: users.name,
+      departmentName: departments.name,
+      attendanceCount: sql<number>`count(${attendance.id})`,
+      dateRange: sql<string>`COALESCE(TO_CHAR(MIN(${attendance.attendanceDate}), 'DD-MM-YYYY'), '-') || ' to ' || COALESCE(TO_CHAR(MAX(${attendance.attendanceDate}), 'DD-MM-YYYY'), '-')`,
+    })
+    .from(users)
+    .leftJoin(departments, eq(users.departmentId, departments.id))
+    .leftJoin(attendance, eq(users.id, attendance.employeeId))
+    .where(and(...conditions))
+    .groupBy(users.id, users.employeeId, users.name, departments.name)
+    .orderBy(users.employeeId);
+
+  return {
+    success: true,
+    message: `${records.length} staff record(s) found`,
+    data: {
+      records,
+      total: records.length,
+    },
+  };
+}
+
+export async function deleteMasterAdminAttendanceRecords(
+  authUser: AuthUser,
+  input: DeleteAttendanceRecordsInput
+) {
+  if (authUser.role !== "MASTER_ADMIN") {
+    throw new AppError(
+      403,
+      "Only MASTER_ADMIN can delete attendance records"
+    );
+  }
+
+  if (!authUser.companyId) {
+    throw new AppError(403, "Company context is required");
+  }
+
+  if (input.companyId !== authUser.companyId) {
+    throw new AppError(
+      403,
+      "You do not have permission to delete attendance records for this company"
+    );
+  }
+
+  if (input.startDate && input.endDate) {
+    if (input.startDate > input.endDate) {
+      throw new AppError(400, "Start date cannot be after end date");
+    }
+  }
+
+  if (input.departmentId) {
+    const [department] = await db
+      .select({ id: departments.id })
+      .from(departments)
+      .where(
+        and(
+          eq(departments.id, input.departmentId),
+          eq(departments.companyId, authUser.companyId)
+        )
+      )
+      .limit(1);
+
+    if (!department) {
+      throw new AppError(404, "Department not found");
+    }
+  }
+
+  let employeeUuid: string | undefined;
+
+  if (input.employeeId) {
+    const userConditions = [
+      eq(users.employeeId, input.employeeId),
+      eq(users.companyId, authUser.companyId),
+      eq(users.role, "STAFF"),
+    ];
+
+    if (input.departmentId) {
+      userConditions.push(eq(users.departmentId, input.departmentId));
+    }
+
+    const [staff] = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(and(...userConditions))
+      .limit(1);
+
+    if (!staff) {
+      throw new AppError(404, "Staff member not found");
+    }
+
+    employeeUuid = staff.id;
+  }
+
+  const conditions: any[] = [
+    eq(attendance.companyId, authUser.companyId),
+  ];
+
+  if (input.departmentId) {
+    conditions.push(eq(attendance.departmentId, input.departmentId));
+  }
+
+  if (employeeUuid) {
+    conditions.push(eq(attendance.employeeId, employeeUuid));
+  }
+
+  if (input.startDate && input.endDate) {
+    conditions.push(gte(attendance.attendanceDate, input.startDate));
+    conditions.push(lte(attendance.attendanceDate, input.endDate));
+  }
+
+  const [countResult] = await db
+    .select({
+      count: sql<number>`count(*)`,
+    })
+    .from(attendance)
+    .where(and(...conditions));
+
+  const count = Number(countResult?.count ?? 0);
+
+  if (count === 0) {
+    throw new AppError(
+      404,
+      "No attendance records found matching the selected criteria"
+    );
+  }
+
+  await db.transaction(async (tx) => {
+    await tx
+      .delete(attendance)
+      .where(and(...conditions));
+  });
+
+  return {
+    success: true,
+    count,
+    message: `${count} attendance record(s) deleted successfully`,
+  };
+}
+
+export async function getMasterAdminAttendanceRecordsPreview(
+  authUser: AuthUser,
+  input: DeleteAttendanceRecordsInput
+) {
+  if (authUser.role !== "MASTER_ADMIN") {
+    throw new AppError(
+      403,
+      "Only MASTER_ADMIN can view attendance records"
+    );
+  }
+
+  if (!authUser.companyId) {
+    throw new AppError(403, "Company context is required");
+  }
+
+  if (input.companyId !== authUser.companyId) {
+    throw new AppError(
+      403,
+      "You do not have permission to view attendance records for this company"
+    );
+  }
+
+  if (input.startDate && input.endDate) {
+    if (input.startDate > input.endDate) {
+      throw new AppError(400, "Start date cannot be after end date");
+    }
+  }
+
+  if (input.departmentId) {
+    const [department] = await db
+      .select({ id: departments.id })
+      .from(departments)
+      .where(
+        and(
+          eq(departments.id, input.departmentId),
+          eq(departments.companyId, authUser.companyId)
+        )
+      )
+      .limit(1);
+
+    if (!department) {
+      throw new AppError(404, "Department not found");
+    }
+  }
+
+  let employeeUuid: string | undefined;
+
+  if (input.employeeId) {
+    const userConditions = [
+      eq(users.employeeId, input.employeeId),
+      eq(users.companyId, authUser.companyId),
+      eq(users.role, "STAFF"),
+    ];
+
+    if (input.departmentId) {
+      userConditions.push(eq(users.departmentId, input.departmentId));
+    }
+
+    const [staff] = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(and(...userConditions))
+      .limit(1);
+
+    if (!staff) {
+      throw new AppError(404, "Staff member not found");
+    }
+
+    employeeUuid = staff.id;
+  }
+
+  const conditions: any[] = [
+    eq(attendance.companyId, authUser.companyId),
+  ];
+
+  if (input.departmentId) {
+    conditions.push(eq(attendance.departmentId, input.departmentId));
+  }
+
+  if (employeeUuid) {
+    conditions.push(eq(attendance.employeeId, employeeUuid));
+  }
+
+  if (input.startDate && input.endDate) {
+    conditions.push(gte(attendance.attendanceDate, input.startDate));
+    conditions.push(lte(attendance.attendanceDate, input.endDate));
+  }
+
+  const [countResult] = await db
+    .select({
+      count: sql<number>`count(*)`,
+    })
+    .from(attendance)
+    .where(and(...conditions));
+
+  const count = Number(countResult?.count ?? 0);
+
+  const records = await db
+    .select({
+      id: attendance.id,
+      employeeId: users.employeeId,
+      employeeName: users.name,
+      departmentName: departments.name,
+      attendanceDate: attendance.attendanceDate,
+      clockInTime: attendance.clockInTime,
+      clockOutTime: attendance.clockOutTime,
+      clockInLocationName: attendance.clockInLocationName,
+      clockOutLocationName: attendance.clockOutLocationName,
+    })
+    .from(attendance)
+    .leftJoin(users, eq(attendance.employeeId, users.id))
+    .leftJoin(departments, eq(attendance.departmentId, departments.id))
+    .where(and(...conditions))
+    .orderBy(desc(attendance.attendanceDate), desc(attendance.clockInTime))
+    .limit(200);
+
+  return {
+    success: true,
+    message: `${count} attendance record(s) found`,
+    data: {
+      records,
+      total: count,
+    },
+  };
 }

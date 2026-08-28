@@ -2,7 +2,7 @@ import { Router, } from "express";
 import { authenticateToken, } from "../middleware/auth.middleware.js";
 import { allowRoles } from "../middleware/role.middleware.js";
 import { validateBody } from "../middleware/validate.middleware.js";
-import { createMasterAdmin, getMasterAdmins, activateMasterAdmin, deactivateMasterAdmin, deleteMasterAdmin, } from "../modules/program-owner/program-owner.service.js";
+import { createMasterAdmin, getMasterAdmins, activateMasterAdmin, deactivateMasterAdmin, deleteMasterAdmin, getCompanies, getCompanyDetails, deleteCompany, } from "../modules/program-owner/program-owner.service.js";
 import { createMasterAdminSchema } from "../modules/program-owner/program-owner.schema.js";
 const router = Router();
 const programOwnerAccess = [
@@ -83,6 +83,50 @@ router.delete("/master-admins/:id", ...programOwnerAccess, async (req, res, next
             success: true,
             message: "Master Admin deleted successfully.",
         });
+    }
+    catch (error) {
+        next(error);
+    }
+});
+/**
+ * GET /api/program-owner/companies
+ */
+router.get("/companies", ...programOwnerAccess, async (req, res, next) => {
+    try {
+        const data = await getCompanies(req.user);
+        res.status(200).json({
+            success: true,
+            data,
+        });
+    }
+    catch (error) {
+        next(error);
+    }
+});
+/**
+ * GET /api/program-owner/companies/:companyId
+ */
+router.get("/companies/:companyId", ...programOwnerAccess, async (req, res, next) => {
+    try {
+        const companyId = String(req.params.companyId);
+        const data = await getCompanyDetails(req.user, companyId);
+        res.status(200).json({
+            success: true,
+            data,
+        });
+    }
+    catch (error) {
+        next(error);
+    }
+});
+/**
+ * DELETE /api/program-owner/companies/:companyId
+ */
+router.delete("/companies/:companyId", ...programOwnerAccess, async (req, res, next) => {
+    try {
+        const companyId = String(req.params.companyId);
+        const result = await deleteCompany(req.user, companyId);
+        res.status(200).json(result);
     }
     catch (error) {
         next(error);

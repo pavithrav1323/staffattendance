@@ -9,6 +9,7 @@ import adminRoutes from "./routes/admin.routes.js";
 import masterAdminRoutes from "./routes/master-admin.routes.js";
 import programOwnerRoutes from "./routes/program-owner.routes.js";
 import webauthnRoutes from "./routes/webauthn.routes.js";
+import { pool } from "./db/connection.js";
 
 const app = express();
 
@@ -75,6 +76,16 @@ app.use(errorHandler);
 
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`Staff Tracker Geo API running on http://0.0.0.0:${PORT}`);
+
+  // Background DB warm-up: do not block HTTP startup
+  console.log("[DB] warmup start");
+  pool.query("SELECT 1")
+    .then(() => {
+      console.log("[DB] warmup complete");
+    })
+    .catch((error: any) => {
+      console.error("[DB] warmup failed:", error.message);
+    });
 });
 
 

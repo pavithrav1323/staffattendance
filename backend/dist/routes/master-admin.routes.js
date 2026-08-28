@@ -3,8 +3,8 @@ import { authenticateToken, } from "../middleware/auth.middleware.js";
 import { allowRoles } from "../middleware/role.middleware.js";
 import { requireCompanyContext } from "../middleware/tenant.middleware.js";
 import { validateBody } from "../middleware/validate.middleware.js";
-import { createAdminSchema, createDepartmentSchema, } from "../modules/master-admin/master-admin.schema.js";
-import { activateAdmin, createAdmin, createDepartment, deactivateAdmin, deleteAdmin, deleteDepartment, getAdmins, getDepartments, getMasterAdminAttendance, getMasterAdminAttendanceExport, } from "../modules/master-admin/master-admin.service.js";
+import { createAdminSchema, createDepartmentSchema, deleteAttendanceRecordsSchema, deleteStaffDataSchema, updateAttendanceTimeSchema, } from "../modules/master-admin/master-admin.schema.js";
+import { activateAdmin, createAdmin, createDepartment, deactivateAdmin, deleteAdmin, deleteDepartment, getAdmins, getDepartments, getMasterAdminAttendance, getMasterAdminAttendanceExport, getMasterAdminAttendanceRecordsPreview, getMasterAdminStaffDataPreview, updateMasterAdminAttendanceTime, deleteMasterAdminStaffData, deleteMasterAdminAttendanceRecords, } from "../modules/master-admin/master-admin.service.js";
 import { getAdminAttendanceSummary, getApprovedStaff, getMasterAdminDashboardStats, getPendingStaff, approveStaff, rejectStaff, activateStaff, deactivateStaff, } from "../modules/admin/admin.service.js";
 const router = Router();
 const masterAdminAccess = [
@@ -183,6 +183,103 @@ router.get("/attendance", ...masterAdminAttendanceAccess, async (req, res, next)
             success: true,
             data,
         });
+    }
+    catch (error) {
+        next(error);
+    }
+});
+/**
+ * PUT /api/master-admin/attendance/:attendanceId/time
+ */
+router.put("/attendance/:attendanceId/time", ...masterAdminAccess, validateBody(updateAttendanceTimeSchema), async (req, res, next) => {
+    try {
+        const attendanceId = String(req.params.attendanceId);
+        const result = await updateMasterAdminAttendanceTime(req.user, attendanceId, req.body);
+        res.status(200).json(result);
+    }
+    catch (error) {
+        next(error);
+    }
+});
+/**
+ * DELETE /api/master-admin/staff-data
+ */
+router.delete("/staff-data", ...masterAdminAccess, validateBody(deleteStaffDataSchema), async (req, res, next) => {
+    try {
+        const result = await deleteMasterAdminStaffData(req.user, req.body);
+        res.status(200).json(result);
+    }
+    catch (error) {
+        next(error);
+    }
+});
+/**
+ * GET /api/master-admin/staff-data/preview
+ */
+router.get("/staff-data/preview", ...masterAdminAccess, async (req, res, next) => {
+    try {
+        const input = {
+            companyId: String(req.query.companyId || req.user.companyId),
+            departmentId: req.query.departmentId
+                ? String(req.query.departmentId)
+                : undefined,
+            employeeId: req.query.employeeId
+                ? String(req.query.employeeId)
+                : undefined,
+            dateStart: req.query.dateStart
+                ? String(req.query.dateStart)
+                : undefined,
+            dateEnd: req.query.dateEnd
+                ? String(req.query.dateEnd)
+                : undefined,
+        };
+        const result = await getMasterAdminStaffDataPreview(req.user, input);
+        res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+        res.set("Pragma", "no-cache");
+        res.set("Expires", "0");
+        res.status(200).json(result);
+    }
+    catch (error) {
+        next(error);
+    }
+});
+/**
+ * GET /api/master-admin/attendance-records/preview
+ */
+router.get("/attendance-records/preview", ...masterAdminAccess, async (req, res, next) => {
+    try {
+        const input = {
+            companyId: String(req.query.companyId || req.user.companyId),
+            departmentId: req.query.departmentId
+                ? String(req.query.departmentId)
+                : undefined,
+            employeeId: req.query.employeeId
+                ? String(req.query.employeeId)
+                : undefined,
+            startDate: req.query.startDate
+                ? String(req.query.startDate)
+                : undefined,
+            endDate: req.query.endDate
+                ? String(req.query.endDate)
+                : undefined,
+        };
+        const result = await getMasterAdminAttendanceRecordsPreview(req.user, input);
+        res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+        res.set("Pragma", "no-cache");
+        res.set("Expires", "0");
+        res.status(200).json(result);
+    }
+    catch (error) {
+        next(error);
+    }
+});
+/**
+ * DELETE /api/master-admin/attendance-records
+ */
+router.delete("/attendance-records", ...masterAdminAccess, validateBody(deleteAttendanceRecordsSchema), async (req, res, next) => {
+    try {
+        const result = await deleteMasterAdminAttendanceRecords(req.user, req.body);
+        res.status(200).json(result);
     }
     catch (error) {
         next(error);

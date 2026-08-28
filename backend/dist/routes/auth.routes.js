@@ -3,7 +3,7 @@ import { authenticateToken, } from "../middleware/auth.middleware.js";
 import { changePassword, getMyProfile, getPublicCompanies, getPublicDepartments, login, logout, refreshAccessToken, registerStaff, registerProgramOwner, } from "../modules/auth/auth.service.js";
 import { loginSchema, refreshSchema, registerSchema, registerProgramOwnerSchema, } from "../modules/auth/auth.schema.js";
 import { validateBody } from "../middleware/validate.middleware.js";
-import { loginRateLimiter, refreshRateLimiter, passwordResetRateLimiter, } from "../middleware/rate-limit.middleware.js";
+import { refreshRateLimiter, passwordResetRateLimiter, } from "../middleware/rate-limit.middleware.js";
 import { AppError } from "../utils/app-error.js";
 const router = Router();
 router.post("/register", validateBody(registerSchema), async (req, res, next) => {
@@ -59,7 +59,7 @@ router.get("/me", authenticateToken, async (req, res, next) => {
         next(error);
     }
 });
-router.post("/login", loginRateLimiter, validateBody(loginSchema), async (req, res, next) => {
+router.post("/login", validateBody(loginSchema), async (req, res, next) => {
     try {
         const result = await login(req.body);
         res.status(200).json({

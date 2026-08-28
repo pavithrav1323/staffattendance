@@ -19,3 +19,60 @@ export const createDepartmentSchema = z.object({
 
 export type CreateDepartmentInput =
   z.infer<typeof createDepartmentSchema>;
+
+export const updateAttendanceTimeSchema = z.object({
+  clockIn: z
+    .string()
+    .regex(
+      /^([01]\d|2[0-3]):([0-5]\d)$/,
+      "Invalid clockIn time format. Expected HH:MM"
+    )
+    .optional(),
+  clockOut: z
+    .string()
+    .regex(
+      /^([01]\d|2[0-3]):([0-5]\d)$/,
+      "Invalid clockOut time format. Expected HH:MM"
+    )
+    .or(z.literal(""))
+    .or(z.null())
+    .optional(),
+  timezone: z.string().optional(),
+});
+
+export type UpdateAttendanceTimeInput =
+  z.infer<typeof updateAttendanceTimeSchema>;
+
+export const deleteStaffDataSchema = z.object({
+  companyId: z.string().uuid(),
+  departmentId: z.string().uuid().optional(),
+  employeeId: z.string().trim().min(1).optional(),
+  dateStart: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid date format. Expected YYYY-MM-DD")
+    .optional(),
+  dateEnd: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid date format. Expected YYYY-MM-DD")
+    .optional(),
+});
+
+export type DeleteStaffDataInput =
+  z.infer<typeof deleteStaffDataSchema>;
+
+export const deleteAttendanceRecordsSchema = z.object({
+  companyId: z.string().uuid(),
+  departmentId: z.string().uuid().optional(),
+  employeeId: z.string().trim().min(1).optional(),
+  startDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid date format. Expected YYYY-MM-DD")
+    .optional(),
+  endDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid date format. Expected YYYY-MM-DD")
+    .optional(),
+});
+
+export type DeleteAttendanceRecordsInput =
+  z.infer<typeof deleteAttendanceRecordsSchema>;
