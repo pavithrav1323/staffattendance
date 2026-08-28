@@ -18,6 +18,7 @@ const LoginPage = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [loadingText, setLoadingText] = useState('Logging in...');
   const [pendingApproval, setPendingApproval] = useState<PendingApprovalData | null>(null);
   const [rejectedData, setRejectedData] = useState<PendingApprovalData | null>(null);
   const navigate = useNavigate();
@@ -33,7 +34,12 @@ const LoginPage = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    setLoadingText('Logging in...');
     setError(null);
+
+    const messageTimeout = setTimeout(() => {
+      setLoadingText('Connecting to server...');
+    }, 3000);
 
     const trimmedEmail = email.trim();
     const trimmedPassword = password;
@@ -59,6 +65,8 @@ const LoginPage = () => {
     try {
       setPendingApproval(null);
       setRejectedData(null);
+
+      const t0 = performance.now();
       const user = await authService.login(
         trimmedEmail,
         trimmedPassword
@@ -80,6 +88,8 @@ const LoginPage = () => {
       } else {
         setError('Unknown role. Please contact support.');
       }
+
+      console.log(`[LOGIN-FE] total: ${Math.round(performance.now() - t0)}ms`);
     } catch (err: any) {
       if (err instanceof ApiError && err.code === 'STAFF_APPROVAL_PENDING') {
         setPendingApproval({ admin: err.data?.admin || null });
@@ -93,6 +103,8 @@ const LoginPage = () => {
         setError(err.message || 'Login failed');
       }
     } finally {
+      clearTimeout(messageTimeout);
+      setLoadingText('Logging in...');
       setLoading(false);
     }
   };
@@ -212,7 +224,7 @@ const LoginPage = () => {
           </div>
 
           <button type="submit" disabled={loading} className="login-button">
-            {loading ? 'Logging in...' : 'Login'}
+            {loading ? loadingText : 'Login'}
           </button>
         </form>
 

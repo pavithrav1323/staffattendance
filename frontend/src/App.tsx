@@ -23,6 +23,7 @@ import MasterAdminStaffPage from './pages/MasterAdminStaffPage';
 import ProgramOwnerLayout from './layouts/ProgramOwnerLayout';
 import ProgramOwnerDashboardPage from './pages/ProgramOwnerDashboardPage';
 import ProgramOwnerMasterAdminsPage from './pages/ProgramOwnerMasterAdminsPage';
+import ProgramOwnerCompaniesPage from './pages/ProgramOwnerCompaniesPage';
 import './App.css'
 
 function App() {
@@ -107,6 +108,7 @@ function App() {
         >
           <Route index element={<ProgramOwnerDashboardPage />} />
           <Route path="master-admins" element={<ProgramOwnerMasterAdminsPage />} />
+          <Route path="companies" element={<ProgramOwnerCompaniesPage />} />
         </Route>
         <Route
           path="/profile"

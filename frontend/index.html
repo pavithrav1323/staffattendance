@@ -50,6 +50,80 @@
         ">Loading...</p>
       </div>
     </div>
+    <div
+      id="update-error"
+      style="
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        background: #ffffff;
+        color: #1e293b;
+        z-index: 10000;
+        padding: 24px;
+        text-align: center;
+      "
+    >
+      <h1 style="font-size: 1.5rem; margin-bottom: 16px;">Application updated</h1>
+      <p style="color: #64748b; max-width: 400px; margin-bottom: 24px;">
+        The application has been updated. Please reload the page to continue.
+      </p>
+      <button
+        onclick="location.reload()"
+        style="
+          padding: 10px 24px;
+          background: #2563eb;
+          color: #ffffff;
+          border: none;
+          border-radius: 6px;
+          cursor: pointer;
+          font-size: 1rem;
+        "
+      >
+        Reload Application
+      </button>
+    </div>
+
+    <script>
+      (function () {
+        function showUpdateError() {
+          var splash = document.getElementById('splash-screen');
+          if (splash) splash.style.display = 'none';
+          var error = document.getElementById('update-error');
+          if (error) error.style.display = 'flex';
+        }
+
+        function isScriptError(event) {
+          var target = event.target || event.srcElement;
+          return target && target.tagName === 'SCRIPT';
+        }
+
+        window.addEventListener(
+          'error',
+          function (event) {
+            if (isScriptError(event)) {
+              console.warn('[App] Failed to load script:', event.filename || (event.target && event.target.src));
+              showUpdateError();
+            }
+          },
+          true
+        );
+
+        window.addEventListener('unhandledrejection', function (event) {
+          var reason = event.reason ? String(event.reason) : '';
+          if (/load|chunk|module|import/i.test(reason)) {
+            console.warn('[App] Chunk load error:', reason);
+            showUpdateError();
+          }
+        });
+      })();
+    </script>
+
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

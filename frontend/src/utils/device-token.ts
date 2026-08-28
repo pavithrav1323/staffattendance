@@ -71,3 +71,9 @@ export async function clearDeviceToken(): Promise<void> {
     request.onerror = () => reject(request.error);
   });
 }
+
+const deviceTokenPromise = getOrCreateDeviceToken();
+
+export async function getDeviceToken(): Promise<string> {
+  return deviceTokenPromise;
+}
