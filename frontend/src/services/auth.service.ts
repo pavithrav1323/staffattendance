@@ -1,5 +1,5 @@
 import { apiRequest, clearSession, getAccessToken, getRefreshToken, saveAccessToken } from './api';
-import { getOrCreateDeviceToken } from '../utils/device-token';
+import { getDeviceToken } from '../utils/device-token';
 
 interface User {
   id: string;
@@ -34,7 +34,7 @@ interface RefreshResponse {
 }
 
 const login = async (email: string, password: string): Promise<User> => {
-  const deviceToken = await getOrCreateDeviceToken();
+  const deviceToken = await getDeviceToken();
   const response: LoginResponse = await apiRequest('/auth/login', 'POST', {
     email,
     password,
@@ -168,7 +168,7 @@ interface RegisterStaffData {
 }
 
 const registerStaff = async (input: RegisterStaffInput): Promise<RegisterStaffData> => {
-  const deviceToken = await getOrCreateDeviceToken();
+  const deviceToken = await getDeviceToken();
   const response = await apiRequest<RegisterStaffData>('/auth/register', 'POST', {
     ...input,
     deviceToken,

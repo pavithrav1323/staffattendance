@@ -128,6 +128,36 @@ interface CreateResponse {
   data?: any;
 }
 
+interface AttendancePreviewRecord {
+  id: string;
+  employeeId: string;
+  employeeName: string;
+  departmentName: string;
+  attendanceDate: string;
+  clockInTime: string | null;
+  clockOutTime: string | null;
+  clockInLocationName: string | null;
+  clockOutLocationName: string | null;
+}
+
+interface AttendancePreviewResponse {
+  records: AttendancePreviewRecord[];
+  total: number;
+}
+
+interface StaffDataPreviewRecord {
+  employeeId: string;
+  employeeName: string;
+  departmentName: string;
+  attendanceCount: number;
+  dateRange: string;
+}
+
+interface StaffDataPreviewResponse {
+  records: StaffDataPreviewRecord[];
+  total: number;
+}
+
 export const masterAdminService = {
   getDepartments: async (): Promise<DepartmentsResponse> => {
     return apiRequest('/master-admin/departments', 'GET');
@@ -290,5 +320,103 @@ export const masterAdminService = {
 
   deactivateStaff: async (staffId: string): Promise<CreateResponse> => {
     return apiRequest(`/master-admin/staff/${staffId}/deactivate`, 'PATCH');
+  },
+
+  updateAttendanceTime: async (
+    attendanceId: string,
+    data: { clockIn?: string; clockOut?: string; timezone?: string }
+  ): Promise<CreateResponse> => {
+    return apiRequest(`/master-admin/attendance/${attendanceId}/time`, 'PUT', data);
+  },
+
+  deleteStaffData: async (
+    data: {
+      companyId: string;
+      departmentId?: string;
+      employeeId?: string;
+      dateStart?: string;
+      dateEnd?: string;
+    }
+  ): Promise<CreateResponse> => {
+    return apiRequest('/master-admin/staff-data', 'DELETE', data);
+  },
+
+  deleteAttendanceRecords: async (
+    data: {
+      companyId: string;
+      departmentId?: string;
+      employeeId?: string;
+      startDate?: string;
+      endDate?: string;
+    }
+  ): Promise<{ success: boolean; message: string; count?: number }> => {
+    return apiRequest('/master-admin/attendance-records', 'DELETE', data);
+  },
+
+  previewAttendanceRecords: async (
+    companyId: string,
+    params: {
+      departmentId?: string;
+      employeeId?: string;
+      startDate?: string;
+      endDate?: string;
+    }
+  ): Promise<{
+    success: boolean;
+    message: string;
+    data?: AttendancePreviewResponse;
+  }> => {
+    const query = new URLSearchParams();
+    query.append('companyId', companyId);
+    if (params.departmentId) query.append('departmentId', params.departmentId);
+    if (params.employeeId) query.append('employeeId', params.employeeId);
+    if (params.startDate) query.append('startDate', params.startDate);
+    if (params.endDate) query.append('endDate', params.endDate);
+
+    return apiRequest<AttendancePreviewResponse>(
+      `/master-admin/attendance-records/preview?${query.toString()}`,
+      'GET'
+    );
+  },
+
+  previewStaffData: async (
+    companyId: string,
+    params: {
+      departmentId?: string;
+      employeeId?: string;
+      dateStart?: string;
+      dateEnd?: string;
+    }
+  ): Promise<{
+    success: boolean;
+    message: string;
+    data?: StaffDataPreviewResponse;
+  }> => {
+    const query = new URLSearchParams();
+    query.append('companyId', companyId);
+    if (params.departmentId) query.append('departmentId', params.departmentId);
+    if (params.employeeId) query.append('employeeId', params.employeeId);
+    if (params.dateStart) query.append('dateStart', params.dateStart);
+    if (params.dateEnd) query.append('dateEnd', params.dateEnd);
+
+    return apiRequest<StaffDataPreviewResponse>(
+      `/master-admin/staff-data/preview?${query.toString()}`,
+      'GET'
+    );
+  },
+
+  resetStaffPassword: async (
+    staffId: string,
+    temporaryPassword: string
+  ): Promise<{ success: boolean; message: string }> => {
+    return apiRequest(`/admin/staff/${staffId}/reset-password`, 'PATCH', {
+      temporaryPassword,
+    });
+  },
+
+  resetStaffDevice: async (
+    staffId: string
+  ): Promise<{ success: boolean; message: string; data?: any }> => {
+    return apiRequest(`/admin/staff/${staffId}/reset-device`, 'PATCH');
   },
 };

@@ -27,12 +27,14 @@ const ProgramOwnerLayout = () => {
   const menuItems = [
     { path: '/program-owner', label: 'Dashboard' },
     { path: '/program-owner/master-admins', label: 'Master Admins' },
+    { path: '/program-owner/companies', label: 'Companies' },
   ];
 
   const getPageTitle = () => {
     const path = location.pathname;
     if (path === '/program-owner') return 'Dashboard';
     if (path === '/program-owner/master-admins') return 'Master Admins';
+    if (path === '/program-owner/companies') return 'Companies';
     return 'Dashboard';
   };
 

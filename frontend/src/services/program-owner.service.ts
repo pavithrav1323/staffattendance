@@ -22,11 +22,74 @@ export interface CreateMasterAdminInput {
   companyName: string;
 }
 
+export interface Company {
+  id: string;
+  companyCode: string;
+  companyName: string;
+  email: string | null;
+  phone: string | null;
+  timezone?: string;
+  isActive: boolean;
+  status: string;
+  createdAt: string;
+  masterAdminCount: number;
+  staffCount: number;
+  adminName: string | null;
+  adminEmail: string | null;
+}
+
+export interface CompanyMasterAdmin {
+  id: string;
+  employeeId: string | null;
+  name: string;
+  email: string;
+  status: string;
+}
+
+export interface Department {
+  id: string;
+  name: string;
+  code: string;
+}
+
+export interface CompanyDetails {
+  company: Company;
+  status: string;
+  admin: CompanyMasterAdmin | null;
+  masterAdmins: CompanyMasterAdmin[];
+  staffCount: number;
+  departments: Department[];
+}
+
 export const programOwnerService = {
   async getMasterAdmins(): Promise<{ success: boolean; data: MasterAdmin[] }> {
     const response = await apiRequest<MasterAdmin[]>('/program-owner/master-admins');
     if (response.success && response.data) {
       return { success: true, data: response.data };
+    }
+    throw new Error(response.message);
+  },
+
+  async getCompanies(): Promise<{ success: boolean; data: Company[] }> {
+    const response = await apiRequest<Company[]>('/program-owner/companies');
+    if (response.success && response.data) {
+      return { success: true, data: response.data };
+    }
+    throw new Error(response.message);
+  },
+
+  async getCompanyDetails(companyId: string): Promise<{ success: boolean; data: CompanyDetails }> {
+    const response = await apiRequest<CompanyDetails>(`/program-owner/companies/${companyId}`);
+    if (response.success && response.data) {
+      return { success: true, data: response.data };
+    }
+    throw new Error(response.message);
+  },
+
+  async deleteCompany(companyId: string): Promise<{ success: boolean; message?: string }> {
+    const response = await apiRequest<{ message?: string }>(`/program-owner/companies/${companyId}`, 'DELETE');
+    if (response.success) {
+      return { success: true, message: response.message || response.data?.message };
     }
     throw new Error(response.message);
   },

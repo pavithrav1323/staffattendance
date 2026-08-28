@@ -132,7 +132,21 @@ const apiRequest = async <T = unknown>(
       config.body = JSON.stringify(body);
     }
 
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, config);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
+    config.signal = controller.signal;
+
+    let response: Response;
+    try {
+      response = await fetch(`${API_BASE_URL}${endpoint}`, config);
+    } catch (error: any) {
+      if (error?.name === 'AbortError' || error?.message?.includes('aborted')) {
+        throw new ApiError('Unable to connect to the server. Please try again.', 408);
+      }
+      throw error;
+    } finally {
+      clearTimeout(timeoutId);
+    }
 
     if (!response.ok) {
       if (response.status === 401 && token) {
