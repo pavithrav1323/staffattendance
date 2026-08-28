@@ -2,7 +2,7 @@ import rateLimit from "express-rate-limit";
 
 export const loginRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 10, // Maximum 10 attempts per IP in 15 minutes
+  max: 100, // Maximum 10 attempts per IP in 15 minutes
   skipSuccessfulRequests: true,
   standardHeaders: true,
   legacyHeaders: false,
@@ -15,7 +15,7 @@ export const loginRateLimiter = rateLimit({
 
 export const refreshRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 30, // standard protection against token flooding
+  max: 100, // standard protection against token flooding
   standardHeaders: true,
   legacyHeaders: false,
   statusCode: 429,

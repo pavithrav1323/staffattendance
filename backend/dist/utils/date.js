@@ -10,6 +10,37 @@ export function getDateInTimeZone(timeZone) {
     const day = parts.find((part) => part.type === "day")?.value;
     return `${year}-${month}-${day}`;
 }
+export function parseTimeInZone(dateString, timeString, timeZone) {
+    const [year, month, day] = dateString.split("-").map(Number);
+    const [hour, minute] = timeString.split(":").map(Number);
+    let t = new Date(Date.UTC(year, month - 1, day, hour, minute, 0));
+    for (let i = 0; i < 5; i++) {
+        const parts = new Intl.DateTimeFormat("en-CA", {
+            timeZone,
+            year: "numeric",
+            month: "2-digit",
+            day: "2-digit",
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+            hour12: false,
+        }).formatToParts(t);
+        const y = Number(parts.find((p) => p.type === "year")?.value);
+        const mo = Number(parts.find((p) => p.type === "month")?.value);
+        const d = Number(parts.find((p) => p.type === "day")?.value);
+        const h = Number(parts.find((p) => p.type === "hour")?.value);
+        const mi = Number(parts.find((p) => p.type === "minute")?.value);
+        const s = Number(parts.find((p) => p.type === "second")?.value);
+        const actual = new Date(Date.UTC(y, mo - 1, d, h, mi, s));
+        const desired = new Date(Date.UTC(year, month - 1, day, hour, minute, 0));
+        const diff = actual.getTime() - desired.getTime();
+        if (Math.abs(diff) < 60000) {
+            return t;
+        }
+        t = new Date(t.getTime() - diff);
+    }
+    return t;
+}
 export function formatTimeOnly(date, timeZone) {
     if (!date)
         return "--";

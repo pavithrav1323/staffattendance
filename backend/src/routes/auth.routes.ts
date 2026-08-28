@@ -31,7 +31,6 @@ import {
 
 import { validateBody } from "../middleware/validate.middleware.js";
 import {
-  loginRateLimiter,
   refreshRateLimiter,
   passwordResetRateLimiter,
 } from "../middleware/rate-limit.middleware.js";
@@ -131,7 +130,6 @@ router.get(
 
 router.post(
   "/login",
-  loginRateLimiter,
   validateBody(loginSchema),
   async (
     req: Request,

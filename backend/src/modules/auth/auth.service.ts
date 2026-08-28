@@ -9,6 +9,7 @@ import { staffDevices } from "../../db/schema/staff-devices.js";
 import { AppError } from "../../utils/app-error.js";
 import { hashDeviceToken } from "../../utils/device-token.js";
 import { logger } from "../../utils/logger.js";
+import { performance } from "node:perf_hooks";
 import type { AuthRequest } from "../../middleware/auth.middleware.js";
 import {
   createAccessToken,
@@ -203,6 +204,7 @@ export async function registerStaff(input: RegisterInput) {
 
 export async function login(input: LoginInput) {
   logger.info("Login attempt received");
+  const start = performance.now();
 
   const [user] = await db
     .select({
@@ -220,8 +222,8 @@ export async function login(input: LoginInput) {
       departmentName: departments.name,
       workLocationId: users.workLocationId,
       mustChangePassword: users.mustChangePassword,
-      failedLoginAttempts: users.failedLoginAttempts,
-      lockedUntil: users.lockedUntil,
+      deviceResetAllowed: users.deviceResetAllowed,
+      deviceResetExpiry: users.deviceResetExpiry,
     })
     .from(users)
     .leftJoin(companies, eq(users.companyId, companies.id))
@@ -229,17 +231,11 @@ export async function login(input: LoginInput) {
     .where(eq(users.email, input.email))
     .limit(1);
 
+  const t1 = performance.now();
+  console.log(`[LOGIN] user-query: ${Math.round(t1 - start)}ms`);
+
   if (!user) {
     throw new AppError(401, "Invalid email or password");
-  }
-
-  // Account-level lockout check
-  if (user.lockedUntil && new Date(user.lockedUntil) > new Date()) {
-    throw new AppError(
-      429,
-      "Too many login attempts. Please try again later.",
-      "ACCOUNT_LOCKED"
-    );
   }
 
   const passwordMatches = await comparePassword(
@@ -247,41 +243,11 @@ export async function login(input: LoginInput) {
     user.passwordHash
   );
 
+  const t2 = performance.now();
+  console.log(`[LOGIN] bcrypt: ${Math.round(t2 - t1)}ms`);
+
   if (!passwordMatches) {
-    const newAttempts = (user.failedLoginAttempts || 0) + 1;
-    const isLocked = newAttempts >= 15;
-    const lockedUntil = isLocked ? new Date(Date.now() + 15 * 60 * 1000) : null;
-
-    await db
-      .update(users)
-      .set({
-        failedLoginAttempts: newAttempts,
-        lockedUntil,
-        updatedAt: new Date(),
-      })
-      .where(eq(users.id, user.id));
-
-    if (isLocked) {
-      throw new AppError(
-        429,
-        "Account temporarily locked. Try again later.",
-        "ACCOUNT_LOCKED"
-      );
-    }
-
     throw new AppError(401, "Invalid email or password");
-  }
-
-  // Clear failed login attempts upon successful authentication
-  if (user.failedLoginAttempts > 0 || user.lockedUntil) {
-    await db
-      .update(users)
-      .set({
-        failedLoginAttempts: 0,
-        lockedUntil: null,
-        updatedAt: new Date(),
-      })
-      .where(eq(users.id, user.id));
   }
 
   if (user.status === "DISABLED") {
@@ -345,6 +311,9 @@ export async function login(input: LoginInput) {
     throw new AppError(403, "Account is not approved");
   }
 
+  const t3 = performance.now();
+  let t4 = t3;
+
   if (user.role === "STAFF") {
     const incomingHash = input.deviceToken
       ? hashDeviceToken(input.deviceToken)
@@ -370,61 +339,48 @@ export async function login(input: LoginInput) {
     } else if (incomingHash) {
       const now = new Date();
 
-      const [approvalRecord] = await db
-        .select({
-          deviceResetAllowed: users.deviceResetAllowed,
-          deviceResetExpiry: users.deviceResetExpiry,
-        })
-        .from(users)
-        .where(
-          and(
-            eq(users.id, user.id),
-            eq(users.deviceResetAllowed, true)
-          )
-        )
-        .limit(1);
-
       const hasValidApproval =
-        Boolean(approvalRecord) &&
-        approvalRecord.deviceResetExpiry !== null &&
-        approvalRecord.deviceResetExpiry !== undefined &&
-        new Date(approvalRecord.deviceResetExpiry) > now;
+        user.deviceResetAllowed === true &&
+        user.deviceResetExpiry !== null &&
+        user.deviceResetExpiry !== undefined &&
+        new Date(user.deviceResetExpiry) > now;
 
       if (hasValidApproval) {
         // Valid admin approval window: allow new device, invalidate old device, consume approval
-        if (activeDevice) {
-          await db
-            .update(staffDevices)
+        await db.transaction(async (tx) => {
+          if (activeDevice) {
+            await tx
+              .update(staffDevices)
+              .set({
+                status: "REVOKED",
+                revokedAt: new Date(),
+              })
+              .where(eq(staffDevices.id, activeDevice.id));
+          }
+
+          await tx
+            .insert(staffDevices)
+            .values({
+              userId: user.id,
+              tokenHash: incomingHash,
+              deviceName: "Unknown",
+              userAgent: "",
+              status: "ACTIVE",
+              approvedAt: new Date(),
+            });
+
+          await tx
+            .update(users)
             .set({
-              status: "REVOKED",
-              revokedAt: new Date(),
+              deviceResetAllowed: false,
+              deviceResetExpiry: null,
+              updatedAt: new Date(),
             })
-            .where(eq(staffDevices.id, activeDevice.id));
-        }
-
-        await db
-          .insert(staffDevices)
-          .values({
-            userId: user.id,
-            tokenHash: incomingHash,
-            deviceName: "Unknown",
-            userAgent: "",
-            status: "ACTIVE",
-            approvedAt: new Date(),
-          });
-
-        await db
-          .update(users)
-          .set({
-            deviceResetAllowed: false,
-            deviceResetExpiry: null,
-            updatedAt: new Date(),
-          })
-          .where(eq(users.id, user.id));
+            .where(eq(users.id, user.id));
+        });
       } else if (
-        approvalRecord &&
-        approvalRecord.deviceResetAllowed &&
-        (!approvalRecord.deviceResetExpiry || new Date(approvalRecord.deviceResetExpiry) <= now)
+        user.deviceResetAllowed === true &&
+        (!user.deviceResetExpiry || new Date(user.deviceResetExpiry) <= now)
       ) {
         throw new AppError(
           403,
@@ -446,8 +402,14 @@ export async function login(input: LoginInput) {
         "STAFF_DEVICE_NOT_REGISTERED"
       );
     }
+
+    t4 = performance.now();
+    console.log(`[LOGIN] device-check: ${Math.round(t4 - t3)}ms`);
+  } else {
+    console.log(`[LOGIN] device-check: 0ms`);
   }
 
+  const t5 = performance.now();
   const accessToken = createAccessToken({
     userId: user.id,
     companyId: user.companyId,
@@ -462,6 +424,10 @@ export async function login(input: LoginInput) {
     user.id,
     refreshToken
   );
+
+  const t6 = performance.now();
+  console.log(`[LOGIN] refresh-insert: ${Math.round(t6 - t5)}ms`);
+  console.log(`[LOGIN] total: ${Math.round(t6 - start)}ms`);
 
   return {
     accessToken,

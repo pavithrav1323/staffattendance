@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, timestamp, text, } from "drizzle-orm/pg-core";
+import { pgTable, uuid, varchar, timestamp, text, index, } from "drizzle-orm/pg-core";
 import { users } from "./users.js";
 export const staffDevices = pgTable("staff_devices", {
     id: uuid("id").defaultRandom().primaryKey(),
@@ -17,5 +17,8 @@ export const staffDevices = pgTable("staff_devices", {
         .defaultNow(),
     approvedAt: timestamp("approved_at", { withTimezone: true }),
     revokedAt: timestamp("revoked_at", { withTimezone: true }),
-});
+}, (table) => [
+    index("idx_staff_devices_user_status").on(table.userId, table.status),
+    index("idx_staff_devices_token_hash").on(table.tokenHash),
+]);
 //# sourceMappingURL=staff-devices.js.map

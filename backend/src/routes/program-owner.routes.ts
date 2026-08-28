@@ -18,6 +18,9 @@ import {
   activateMasterAdmin,
   deactivateMasterAdmin,
   deleteMasterAdmin,
+  getCompanies,
+  getCompanyDetails,
+  deleteCompany,
 } from "../modules/program-owner/program-owner.service.js";
 import { createMasterAdminSchema } from "../modules/program-owner/program-owner.schema.js";
 
@@ -153,6 +156,78 @@ router.delete(
         success: true,
         message: "Master Admin deleted successfully.",
       });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * GET /api/program-owner/companies
+ */
+router.get(
+  "/companies",
+  ...programOwnerAccess,
+  async (
+    req: AuthRequest,
+    res: Response,
+    next: NextFunction
+  ) => {
+    try {
+      const data = await getCompanies(req.user!);
+
+      res.status(200).json({
+        success: true,
+        data,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * GET /api/program-owner/companies/:companyId
+ */
+router.get(
+  "/companies/:companyId",
+  ...programOwnerAccess,
+  async (
+    req: AuthRequest,
+    res: Response,
+    next: NextFunction
+  ) => {
+    try {
+      const companyId = String(req.params.companyId);
+      const data = await getCompanyDetails(req.user!, companyId);
+
+      res.status(200).json({
+        success: true,
+        data,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * DELETE /api/program-owner/companies/:companyId
+ */
+router.delete(
+  "/companies/:companyId",
+  ...programOwnerAccess,
+  async (
+    req: AuthRequest,
+    res: Response,
+    next: NextFunction
+  ) => {
+    try {
+      const companyId = String(req.params.companyId);
+
+      const result = await deleteCompany(req.user!, companyId);
+
+      res.status(200).json(result);
     } catch (error) {
       next(error);
     }
