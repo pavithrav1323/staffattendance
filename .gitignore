@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Build output
+dist/
+**/dist/
+
+# Environment and secrets
+.env
+.env.*
+**/.env
+**/.env.*
+.secret*
+**/.secret*
+
+# Vite
+.vite/
+**/.vite/
+
+# Logs
+*.log
+
+# Backup files
+*.bak
+
+# Archives
+*.zip
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
