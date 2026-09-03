@@ -9,6 +9,7 @@ import adminRoutes from "./routes/admin.routes.js";
 import masterAdminRoutes from "./routes/master-admin.routes.js";
 import programOwnerRoutes from "./routes/program-owner.routes.js";
 import webauthnRoutes from "./routes/webauthn.routes.js";
+import clinicalReportsRoutes from "./routes/clinical-reports.routes.js";
 import { pool } from "./db/connection.js";
 
 const app = express();
@@ -71,6 +72,7 @@ app.use("/api/admin", adminRoutes);
 app.use("/api/master-admin", masterAdminRoutes);
 app.use("/api/program-owner", programOwnerRoutes);
 app.use("/api/webauthn", webauthnRoutes);
+app.use("/api/clinical-reports", clinicalReportsRoutes);
 app.use(errorHandler);
 
 

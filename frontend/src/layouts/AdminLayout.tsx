@@ -28,6 +28,7 @@ const AdminLayout = () => {
     { path: '/admin', label: 'Dashboard' },
     { path: '/admin/staff', label: 'Staff Management' },
     { path: '/admin/attendance', label: 'Attendance Report' },
+    { path: '/admin/clinical-reports', label: 'Clinical Report' },
   ];
 
   const getPageTitle = () => {
@@ -35,6 +36,7 @@ const AdminLayout = () => {
     if (path === '/admin') return 'Dashboard';
     if (path === '/admin/staff') return 'Staff Management';
     if (path === '/admin/attendance') return 'Attendance Report';
+    if (path === '/admin/clinical-reports') return 'Clinical Report';
     return 'Dashboard';
   };
 

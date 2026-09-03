@@ -20,6 +20,7 @@ import MasterAdminAttendancePage from './pages/MasterAdminAttendancePage';
 import MasterAdminDepartmentsPage from './pages/MasterAdminDepartmentsPage';
 import MasterAdminAdminsPage from './pages/MasterAdminAdminsPage';
 import MasterAdminStaffPage from './pages/MasterAdminStaffPage';
+import ClinicalReportsPage from './pages/ClinicalReportsPage';
 import ProgramOwnerLayout from './layouts/ProgramOwnerLayout';
 import ProgramOwnerDashboardPage from './pages/ProgramOwnerDashboardPage';
 import ProgramOwnerMasterAdminsPage from './pages/ProgramOwnerMasterAdminsPage';
@@ -69,6 +70,7 @@ function App() {
           <Route index element={<Navigate to="/staff/attendance" replace />} />
           <Route path="attendance" element={<StaffAttendancePage />} />
           <Route path="attendance-history" element={<StaffAttendanceHistoryPage />} />
+          <Route path="clinical-reports" element={<ClinicalReportsPage />} />
           <Route path="dashboard" element={<StaffDashboardPage />} />
           <Route path="profile" element={<StaffProfilePage />} />
         </Route>
@@ -83,6 +85,7 @@ function App() {
           <Route index element={<AdminDashboard />} />
           <Route path="staff" element={<AdminStaffPage />} />
           <Route path="attendance" element={<AdminAttendancePage />} />
+          <Route path="clinical-reports" element={<ClinicalReportsPage />} />
         </Route>
         <Route
           path="/master-admin"
@@ -97,6 +100,7 @@ function App() {
           <Route path="departments" element={<MasterAdminDepartmentsPage />} />
           <Route path="admins" element={<MasterAdminAdminsPage />} />
           <Route path="staff" element={<MasterAdminStaffPage />} />
+          <Route path="clinical-reports" element={<ClinicalReportsPage />} />
         </Route>
         <Route
           path="/program-owner"

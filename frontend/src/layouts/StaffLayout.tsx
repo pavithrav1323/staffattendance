@@ -27,6 +27,7 @@ const StaffLayout = () => {
   const menuItems = [
     { path: '/staff/attendance', label: 'Attendance' },
     { path: '/staff/attendance-history', label: 'Attendance History' },
+    { path: '/staff/clinical-reports', label: 'Clinical Report' },
     { path: '/staff/dashboard', label: 'Dashboard' },
   ];
 
@@ -35,6 +36,7 @@ const StaffLayout = () => {
     if (path === '/staff/dashboard') return 'Dashboard';
     if (path === '/staff/attendance') return 'Attendance';
     if (path === '/staff/attendance-history') return 'Attendance History';
+    if (path === '/staff/clinical-reports') return 'Clinical Report';
     if (path === '/staff/profile') return 'Profile';
     return 'Attendance';
   };

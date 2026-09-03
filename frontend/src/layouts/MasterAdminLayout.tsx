@@ -30,6 +30,7 @@ const MasterAdminLayout = () => {
     { path: '/master-admin/attendance', label: 'Attendance Report' },
     { path: '/master-admin/staff', label: 'Staff Requests' },
     { path: '/master-admin/departments', label: 'Department' },
+    { path: '/master-admin/clinical-reports', label: 'Clinical Report' },
   ];
 
   const getPageTitle = () => {
@@ -39,6 +40,7 @@ const MasterAdminLayout = () => {
     if (path === '/master-admin/departments') return 'Department';
     if (path === '/master-admin/admins') return 'Admin Management';
     if (path === '/master-admin/staff') return 'Staff Requests';
+    if (path === '/master-admin/clinical-reports') return 'Clinical Report';
     return 'Dashboard';
   };
 
