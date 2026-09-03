@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { masterAdminService } from '../services/master-admin.service';
 import { validatePassword } from '../utils/validation';
 
@@ -34,6 +34,7 @@ interface Department {
   id: string;
   name: string;
   code: string;
+  isActive: boolean;
 }
 
 const MasterAdminStaffPage = () => {
@@ -49,30 +50,11 @@ const MasterAdminStaffPage = () => {
   const [approvedSearch, setApprovedSearch] = useState('');
   const [selectedDepartment, setSelectedDepartment] = useState('all');
 
-  const [deleteMode, setDeleteMode] = useState<
-    'individual' | 'department' | 'dateRange' | 'company' | 'combined'
-  >('individual');
-  const [deleteDepartment, setDeleteDepartment] = useState('');
-  const [deleteEmployee, setDeleteEmployee] = useState('');
-  const [deleteStartDate, setDeleteStartDate] = useState('');
-  const [deleteEndDate, setDeleteEndDate] = useState('');
-  const [deleting, setDeleting] = useState(false);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
-  const [deleteSuccess, setDeleteSuccess] = useState<string | null>(null);
-  const [showPreview, setShowPreview] = useState(false);
-  const [previewLoading, setPreviewLoading] = useState(false);
-  const [previewRecords, setPreviewRecords] = useState<
-    {
-      employeeId: string;
-      employeeName: string;
-      departmentName: string;
-      attendanceCount: number;
-      dateRange: string;
-    }[]
-  >([]);
-  const [previewTotal, setPreviewTotal] = useState(0);
-  const [showConfirm, setShowConfirm] = useState(false);
   const [selectedStaff, setSelectedStaff] = useState<ApprovedStaff | null>(null);
+  const [deleteModeActive, setDeleteModeActive] = useState(false);
+  const [selectedStaffIds, setSelectedStaffIds] = useState<string[]>([]);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+  const [showBulkConfirm, setShowBulkConfirm] = useState(false);
   const [temporaryPassword, setTemporaryPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -81,17 +63,11 @@ const MasterAdminStaffPage = () => {
   const [resetSuccess, setResetSuccess] = useState<string | null>(null);
   const [resettingStaffId, setResettingStaffId] = useState<string | null>(null);
 
-  const currentCompany = useMemo(() => {
-    try {
-      const user = JSON.parse(localStorage.getItem('user') || '{}');
-      return {
-        id: user?.companyId || '',
-        name: user?.companyName || 'Current Company',
-      };
-    } catch {
-      return { id: '', name: 'Current Company' };
-    }
-  }, []);
+  const [editingStaff, setEditingStaff] = useState<ApprovedStaff | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editPhone, setEditPhone] = useState('');
+  const [editDesignation, setEditDesignation] = useState('');
+  const [editLoading, setEditLoading] = useState(false);
 
   const loadPendingStaff = async () => {
     try {
@@ -116,18 +92,6 @@ const MasterAdminStaffPage = () => {
       
       if (response.success && response.data) {
         setApprovedStaff(response.data);
-        // Extract unique departments with readable names
-        const deptMap = new Map<string, Department>();
-        response.data.forEach(s => {
-          if (s.departmentId && !deptMap.has(s.departmentId)) {
-            deptMap.set(s.departmentId, {
-              id: s.departmentId,
-              name: s.departmentName || s.departmentCode || 'Unknown Department',
-              code: s.departmentCode || '',
-            });
-          }
-        });
-        setDepartments(Array.from(deptMap.values()));
       }
     } catch (err: any) {
       console.error('Failed to load approved staff:', err);
@@ -136,9 +100,22 @@ const MasterAdminStaffPage = () => {
     }
   };
 
+  const loadDepartments = async () => {
+    try {
+      const response = await masterAdminService.getDepartments();
+
+      if (response.success && response.data) {
+        setDepartments(response.data);
+      }
+    } catch (err: any) {
+      console.error('Failed to load departments:', err);
+    }
+  };
+
   useEffect(() => {
     loadPendingStaff();
     loadApprovedStaff();
+    loadDepartments();
   }, []);
 
   const getFilteredStaff = () => {
@@ -323,133 +300,66 @@ const MasterAdminStaffPage = () => {
     });
   };
 
-  const validateDeleteFilters = (): boolean => {
-    if (!currentCompany.id) {
-      setDeleteError('Company context not available');
-      return false;
-    }
-
-    if (deleteMode === 'individual' && !deleteEmployee) {
-      setDeleteError('Please select a staff member');
-      return false;
-    }
-
-    if (deleteMode === 'department' && !deleteDepartment) {
-      setDeleteError('Please select a department');
-      return false;
-    }
-
-    if (
-      (deleteMode === 'dateRange' || deleteMode === 'combined') &&
-      (!deleteStartDate || !deleteEndDate)
-    ) {
-      setDeleteError('Please select both start and end dates');
-      return false;
-    }
-
-    if (
-      deleteStartDate &&
-      deleteEndDate &&
-      deleteEndDate < deleteStartDate
-    ) {
-      setDeleteError('End date cannot be earlier than start date');
-      return false;
-    }
-
-    return true;
+  const handleToggleStaff = (staffId: string) => {
+    setSelectedStaffIds((prev) =>
+      prev.includes(staffId)
+        ? prev.filter((id) => id !== staffId)
+        : [...prev, staffId]
+    );
   };
 
-  const handleViewRecords = async () => {
-    if (!validateDeleteFilters()) return;
+  const handleSelectAll = () => {
+    const filtered = getFilteredApprovedStaff().map((staff) => staff.id);
+    setSelectedStaffIds(filtered);
+  };
 
-    setPreviewLoading(true);
-    setDeleteError(null);
-    setDeleteSuccess(null);
-    setShowPreview(false);
-    setShowConfirm(false);
+  const handleDeselectAll = () => {
+    setSelectedStaffIds([]);
+  };
+
+  const handleDeleteSelectedStaff = () => {
+    setDeleteModeActive(true);
+  };
+
+  const handleCancelDeleteMode = () => {
+    setDeleteModeActive(false);
+    setSelectedStaffIds([]);
+    setShowBulkConfirm(false);
+  };
+
+  const handleShowBulkConfirm = () => {
+    if (selectedStaffIds.length === 0) return;
+    setShowBulkConfirm(true);
+  };
+
+  const handleCancelBulkDelete = () => {
+    setShowBulkConfirm(false);
+  };
+
+  const handleConfirmBulkDelete = async () => {
+    if (selectedStaffIds.length === 0) return;
+
+    setIsBulkDeleting(true);
+    setError(null);
+    setSuccess(null);
 
     try {
-      const response = await masterAdminService.previewStaffData(
-        currentCompany.id,
-        {
-          departmentId: deleteDepartment || undefined,
-          employeeId: deleteEmployee || undefined,
-          dateStart: deleteStartDate || undefined,
-          dateEnd: deleteEndDate || undefined,
-        }
-      );
-
-      if (response.success && response.data) {
-        setPreviewRecords(response.data.records);
-        setPreviewTotal(response.data.total);
-        setShowPreview(true);
-      } else {
-        setDeleteError(response.message || 'Failed to load preview');
-      }
-    } catch (err: any) {
-      setDeleteError(err.message || 'Failed to load preview');
-    } finally {
-      setPreviewLoading(false);
-    }
-  };
-
-  const handleShowConfirm = () => {
-    setShowConfirm(true);
-  };
-
-  const handleCancelDelete = () => {
-    setShowConfirm(false);
-  };
-
-  const handleDeleteStaffData = async () => {
-    if (!currentCompany.id) {
-      setDeleteError('Company context not available');
-      return;
-    }
-
-    setDeleting(true);
-    setDeleteError(null);
-    setDeleteSuccess(null);
-
-    try {
-      const payload: any = { companyId: currentCompany.id };
-
-      if (deleteMode === 'individual') {
-        payload.employeeId = deleteEmployee;
-      } else if (deleteMode === 'department') {
-        payload.departmentId = deleteDepartment;
-      } else if (deleteMode === 'dateRange') {
-        payload.dateStart = deleteStartDate;
-        payload.dateEnd = deleteEndDate;
-      } else if (deleteMode === 'combined') {
-        payload.departmentId = deleteDepartment;
-        payload.dateStart = deleteStartDate;
-        payload.dateEnd = deleteEndDate;
-      }
-
-      const response = await masterAdminService.deleteStaffData(payload);
+      const response = await masterAdminService.deleteStaff(selectedStaffIds);
 
       if (response.success) {
-        setDeleteSuccess(
-          response.message || 'Staff records deleted successfully'
-        );
-        setDeleteEmployee('');
-        setDeleteDepartment('');
-        setDeleteStartDate('');
-        setDeleteEndDate('');
-        setShowPreview(false);
-        setShowConfirm(false);
-        setPreviewRecords([]);
-        setPreviewTotal(0);
-        await loadPendingStaff();
+        setSuccess('Selected staff members were permanently deleted successfully.');
+        setSelectedStaffIds([]);
+        setDeleteModeActive(false);
+        setShowBulkConfirm(false);
         await loadApprovedStaff();
+        await loadDepartments();
       } else {
-        setDeleteError(response.message || 'Failed to delete staff records');
+        setError(response.message || 'Failed to delete selected staff');
       }
     } catch (err: any) {
-      setDeleteError(err.message || 'Failed to delete staff records');
+      setError(err.message || 'Failed to delete selected staff');
     } finally {
-      setDeleting(false);
+      setIsBulkDeleting(false);
     }
   };
 
@@ -534,6 +444,50 @@ const MasterAdminStaffPage = () => {
     setConfirmPassword('');
     setResetError(null);
     setResetSuccess(null);
+  };
+
+  const handleOpenEditStaff = (staff: ApprovedStaff) => {
+    setEditingStaff(staff);
+    setEditName(staff.name);
+    setEditPhone(staff.phone || '');
+    setEditDesignation(staff.designation || '');
+  };
+
+  const closeEditModal = () => {
+    setEditingStaff(null);
+    setEditName('');
+    setEditPhone('');
+    setEditDesignation('');
+    setEditLoading(false);
+  };
+
+  const handleEditStaff = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingStaff) return;
+
+    setEditLoading(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      const response = await masterAdminService.updateStaff(editingStaff.id, {
+        name: editName.trim(),
+        phone: editPhone.trim(),
+        designation: editDesignation.trim(),
+      });
+
+      if (response.success) {
+        setSuccess('Staff updated successfully');
+        closeEditModal();
+        await loadApprovedStaff();
+      } else {
+        setError(response.message || 'Failed to update staff');
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to update staff');
+    } finally {
+      setEditLoading(false);
+    }
   };
 
   return (
@@ -658,6 +612,85 @@ const MasterAdminStaffPage = () => {
             </select>
           </div>
 
+          <div className="bulk-delete-controls" style={{ marginTop: '1rem', marginBottom: '1rem' }}>
+            {!deleteModeActive ? (
+              <button
+                onClick={handleDeleteSelectedStaff}
+                className="reject-button"
+                type="button"
+              >
+                Delete Selected Staff
+              </button>
+            ) : (
+              <div
+                className="bulk-delete-actions"
+                style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}
+              >
+                <button
+                  onClick={handleSelectAll}
+                  className="action-btn"
+                  type="button"
+                >
+                  Select All
+                </button>
+                <button
+                  onClick={handleDeselectAll}
+                  className="action-btn"
+                  type="button"
+                >
+                  Deselect All
+                </button>
+                <span>Selected Staff: {selectedStaffIds.length}</span>
+                <button
+                  onClick={handleShowBulkConfirm}
+                  disabled={selectedStaffIds.length === 0 || isBulkDeleting}
+                  className="reject-button"
+                  type="button"
+                >
+                  Delete Selected
+                </button>
+                <button
+                  onClick={handleCancelDeleteMode}
+                  className="approve-button"
+                  type="button"
+                >
+                  Cancel
+                </button>
+              </div>
+            )}
+
+            {showBulkConfirm && (
+              <div className="delete-confirm-modal" style={{ marginTop: '1rem' }}>
+                <h3>Confirm Delete</h3>
+                <p>
+                  Are you sure you want to permanently delete the selected staff members?
+                </p>
+                <p>
+                  <strong>Selected Staff:</strong> {selectedStaffIds.length}
+                </p>
+                <p>This action cannot be undone.</p>
+                <div className="action-buttons">
+                  <button
+                    onClick={handleConfirmBulkDelete}
+                    disabled={isBulkDeleting}
+                    className="reject-button"
+                    type="button"
+                  >
+                    {isBulkDeleting ? 'Deleting...' : 'Confirm Delete'}
+                  </button>
+                  <button
+                    onClick={handleCancelBulkDelete}
+                    disabled={isBulkDeleting}
+                    className="approve-button"
+                    type="button"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
           {approvedLoading ? (
             <div className="loading-state">Loading approved staff...</div>
           ) : approvedStaff.length === 0 ? (
@@ -672,6 +705,7 @@ const MasterAdminStaffPage = () => {
                   <table className="staff-table">
                     <thead>
                       <tr>
+                        {deleteModeActive && <th></th>}
                         <th>ILKKM ID</th>
                         <th>ILKKM Name</th>
                         <th>ILKKM Email</th>
@@ -686,6 +720,15 @@ const MasterAdminStaffPage = () => {
                     <tbody>
                       {filtered.map((staff) => (
                         <tr key={staff.id}>
+                          {deleteModeActive && (
+                            <td>
+                              <input
+                                type="checkbox"
+                                checked={selectedStaffIds.includes(staff.id)}
+                                onChange={() => handleToggleStaff(staff.id)}
+                              />
+                            </td>
+                          )}
                           <td>{staff.employeeId}</td>
                           <td>{staff.name}</td>
                           <td>{staff.email}</td>
@@ -737,6 +780,13 @@ const MasterAdminStaffPage = () => {
                                   ? 'Allowing...'
                                   : 'Allow From Another Device'}
                               </button>
+                              <button
+                                onClick={() => handleOpenEditStaff(staff)}
+                                className="action-btn"
+                                type="button"
+                              >
+                                Edit
+                              </button>
                             </div>
                           </td>
                         </tr>
@@ -749,250 +799,7 @@ const MasterAdminStaffPage = () => {
           )}
         </div>
 
-        <div className="staff-data-delete">
-          <h3>Staff Data Management</h3>
-
-          {deleteError && (
-            <div className="error-message">
-              {deleteError}
-              <button onClick={() => setDeleteError(null)} className="close-button">×</button>
-            </div>
-          )}
-
-          {deleteSuccess && (
-            <div className="success-message">
-              {deleteSuccess}
-              <button onClick={() => setDeleteSuccess(null)} className="close-button">×</button>
-            </div>
-          )}
-
-          <div className="delete-filter-group">
-            <label htmlFor="deleteMode">Delete Mode</label>
-            <select
-              id="deleteMode"
-              value={deleteMode}
-              onChange={(e) => {
-                setDeleteMode(e.target.value as typeof deleteMode);
-                setShowPreview(false);
-                setShowConfirm(false);
-              }}
-              className="department-filter"
-            >
-              <option value="individual">Select Staff</option>
-              <option value="department">Select Department</option>
-              <option value="dateRange">Select Date Range</option>
-              <option value="company">Select Company</option>
-              <option value="combined">Company + Department + Date Range</option>
-            </select>
-          </div>
-
-          <div className="delete-filter-group">
-            <label htmlFor="deleteCompany">Company</label>
-            <input
-              id="deleteCompany"
-              type="text"
-              value={currentCompany.name}
-              readOnly
-              className="staff-search-input"
-            />
-          </div>
-
-          {deleteMode === 'individual' && (
-            <div className="delete-filter-group">
-              <label htmlFor="deleteEmployee">Select Staff</label>
-              <select
-                id="deleteEmployee"
-                value={deleteEmployee}
-                onChange={(e) => {
-                  setDeleteEmployee(e.target.value);
-                  setShowPreview(false);
-                  setShowConfirm(false);
-                }}
-                className="department-filter"
-              >
-                <option value="">Select Staff</option>
-                {approvedStaff.map((staff) => (
-                  <option key={staff.id} value={staff.employeeId}>
-                    {staff.employeeId} - {staff.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-
-          {(deleteMode === 'department' || deleteMode === 'combined') && (
-            <div className="delete-filter-group">
-              <label htmlFor="deleteDepartment">
-                {deleteMode === 'combined'
-                  ? 'Department (optional)'
-                  : 'Department'}
-              </label>
-              <select
-                id="deleteDepartment"
-                value={deleteDepartment}
-                onChange={(e) => {
-                  setDeleteDepartment(e.target.value);
-                  setShowPreview(false);
-                  setShowConfirm(false);
-                }}
-                className="department-filter"
-              >
-                <option value="">
-                  {deleteMode === 'combined'
-                    ? 'All Departments'
-                    : 'Select Department'}
-                </option>
-                {departments.map((dept) => (
-                  <option key={dept.id} value={dept.id}>
-                    {dept.code ? `${dept.code} - ${dept.name}` : dept.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-
-          {(deleteMode === 'dateRange' || deleteMode === 'combined') && (
-            <>
-              <div className="delete-filter-group">
-                <label htmlFor="deleteStartDate">Start Date</label>
-                <input
-                  id="deleteStartDate"
-                  type="date"
-                  value={deleteStartDate}
-                  onChange={(e) => {
-                    setDeleteStartDate(e.target.value);
-                    setShowPreview(false);
-                    setShowConfirm(false);
-                  }}
-                  className="staff-search-input"
-                />
-              </div>
-              <div className="delete-filter-group">
-                <label htmlFor="deleteEndDate">End Date</label>
-                <input
-                  id="deleteEndDate"
-                  type="date"
-                  value={deleteEndDate}
-                  onChange={(e) => {
-                    setDeleteEndDate(e.target.value);
-                    setShowPreview(false);
-                    setShowConfirm(false);
-                  }}
-                  className="staff-search-input"
-                />
-              </div>
-            </>
-          )}
-
-          <button
-            onClick={handleViewRecords}
-            disabled={previewLoading || deleting}
-            className="export-button"
-          >
-            {previewLoading ? 'Loading...' : 'View Records'}
-          </button>
-
-          {showPreview && (
-            <>
-              <div className="preview-summary">
-                <h4>Preview</h4>
-                <p>
-                  <strong>Total Records Found:</strong> {previewTotal}
-                </p>
-              </div>
-
-              {previewRecords.length > 0 && (
-                <>
-                  <div className="table-container">
-                    <table className="staff-table">
-                      <thead>
-                        <tr>
-                          <th>Employee ID</th>
-                          <th>Employee Name</th>
-                          <th>Department</th>
-                          <th>Attendance Count</th>
-                          <th>Date Range</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {previewRecords.map((record) => (
-                          <tr key={record.employeeId}>
-                            <td>{record.employeeId}</td>
-                            <td>{record.employeeName}</td>
-                            <td>{record.departmentName || '--'}</td>
-                            <td>{record.attendanceCount}</td>
-                            <td>{record.dateRange}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  <button
-                    onClick={handleShowConfirm}
-                    disabled={deleting}
-                    className="reject-button"
-                  >
-                    Delete Selected Staff Records
-                  </button>
-                </>
-              )}
-            </>
-          )}
-
-          {showConfirm && (
-            <div className="delete-confirm-modal">
-              <h3>Confirm Delete</h3>
-              <p>
-                Are you sure you want to permanently delete these staff records?
-              </p>
-
-              <div className="confirm-details">
-                <p>
-                  <strong>Company:</strong> {currentCompany.name}
-                </p>
-                <p>
-                  <strong>Department:</strong>{' '}
-                  {departments.find((d) => d.id === deleteDepartment)?.name || 'All'}
-                </p>
-                <p>
-                  <strong>Staff:</strong>{' '}
-                  {approvedStaff.find((s) => s.employeeId === deleteEmployee)?.name || 'All'}
-                </p>
-                <p>
-                  <strong>Date Range:</strong>{' '}
-                  {deleteStartDate && deleteEndDate
-                    ? `${new Date(deleteStartDate).toLocaleDateString(
-                        'en-GB'
-                      )} to ${new Date(deleteEndDate).toLocaleDateString('en-GB')}`
-                    : 'All dates'}
-                </p>
-                <p>
-                  <strong>Records:</strong> {previewTotal}
-                </p>
-              </div>
-
-              <div className="action-buttons">
-                <button
-                  onClick={handleDeleteStaffData}
-                  disabled={deleting}
-                  className="reject-button"
-                >
-                  {deleting ? 'Deleting...' : 'Confirm Delete'}
-                </button>
-                <button
-                  onClick={handleCancelDelete}
-                  disabled={deleting}
-                  className="approve-button"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {selectedStaff && (
+                {selectedStaff && (
           <div className="modal-overlay" onClick={closeResetModal}>
             <div className="modal-content" onClick={(e) => e.stopPropagation()}>
               <h3>Reset Password</h3>
@@ -1065,6 +872,76 @@ const MasterAdminStaffPage = () => {
                     disabled={resetLoading}
                   >
                     {resetLoading ? 'Resetting...' : 'Reset Password'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {editingStaff && (
+          <div className="modal-overlay" onClick={closeEditModal}>
+            <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+              <h3>Edit Staff</h3>
+              <p className="modal-subtitle">
+                Staff: <strong>{editingStaff.name}</strong>
+                <br />
+                Employee ID: <strong>{editingStaff.employeeId}</strong>
+              </p>
+
+              <form onSubmit={handleEditStaff}>
+                <div className="form-group">
+                  <label htmlFor="editName">Name</label>
+                  <input
+                    id="editName"
+                    type="text"
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                    placeholder="Enter name"
+                    className="staff-search-input"
+                    required
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="editPhone">Phone</label>
+                  <input
+                    id="editPhone"
+                    type="text"
+                    value={editPhone}
+                    onChange={(e) => setEditPhone(e.target.value)}
+                    placeholder="Enter phone"
+                    className="staff-search-input"
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="editDesignation">Designation</label>
+                  <input
+                    id="editDesignation"
+                    type="text"
+                    value={editDesignation}
+                    onChange={(e) => setEditDesignation(e.target.value)}
+                    placeholder="Enter designation"
+                    className="staff-search-input"
+                  />
+                </div>
+
+                <div className="modal-actions">
+                  <button
+                    type="button"
+                    onClick={closeEditModal}
+                    className="reject-button"
+                    disabled={editLoading}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="approve-button"
+                    disabled={editLoading}
+                  >
+                    {editLoading ? 'Saving...' : 'Save Changes'}
                   </button>
                 </div>
               </form>

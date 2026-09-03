@@ -76,3 +76,19 @@ export const deleteAttendanceRecordsSchema = z.object({
 
 export type DeleteAttendanceRecordsInput =
   z.infer<typeof deleteAttendanceRecordsSchema>;
+
+export const deleteStaffIdsSchema = z.object({
+  staffIds: z.array(z.string().uuid()).min(1, "At least one staff ID is required"),
+});
+
+export type DeleteStaffIdsInput =
+  z.infer<typeof deleteStaffIdsSchema>;
+
+export const updateUserSchema = z.object({
+  name: z.string().trim().min(2).max(150),
+  phone: z.string().trim().max(30).optional().or(z.literal("")),
+  designation: z.string().trim().max(100).optional().or(z.literal("")),
+});
+
+export type UpdateUserInput =
+  z.infer<typeof updateUserSchema>;

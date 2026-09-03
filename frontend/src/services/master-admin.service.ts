@@ -341,6 +341,10 @@ export const masterAdminService = {
     return apiRequest('/master-admin/staff-data', 'DELETE', data);
   },
 
+  deleteStaff: async (staffIds: string[]): Promise<CreateResponse> => {
+    return apiRequest('/master-admin/staff/permanent', 'DELETE', { staffIds });
+  },
+
   deleteAttendanceRecords: async (
     data: {
       companyId: string;
@@ -418,5 +422,19 @@ export const masterAdminService = {
     staffId: string
   ): Promise<{ success: boolean; message: string; data?: any }> => {
     return apiRequest(`/admin/staff/${staffId}/reset-device`, 'PATCH');
+  },
+
+  updateStaff: async (
+    staffId: string,
+    data: { name: string; phone: string; designation: string }
+  ): Promise<{ success: boolean; message: string; data?: any }> => {
+    return apiRequest(`/master-admin/staff/${staffId}`, 'PATCH', data);
+  },
+
+  updateAdmin: async (
+    adminId: string,
+    data: { name: string; phone: string; designation: string }
+  ): Promise<{ success: boolean; message: string; data?: any }> => {
+    return apiRequest(`/master-admin/admins/${adminId}`, 'PATCH', data);
   },
 };

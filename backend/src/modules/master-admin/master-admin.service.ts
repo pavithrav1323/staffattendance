@@ -1118,7 +1118,22 @@ export async function deleteMasterAdminStaffData(
     }
   }
 
-  const conditions: any[] = [eq(users.companyId, authUser.companyId)];
+  if (
+    !input.departmentId &&
+    !input.employeeId &&
+    !(input.dateStart && input.dateEnd)
+  ) {
+    throw new AppError(
+      400,
+      "At least one filter (department, employee, or date range) is required"
+    );
+  }
+
+  const conditions: any[] = [
+    eq(users.companyId, authUser.companyId),
+    eq(users.role, "STAFF"),
+    eq(users.isDeleted, false),
+  ];
 
   if (input.departmentId) {
     conditions.push(eq(users.departmentId, input.departmentId));
@@ -1162,16 +1177,229 @@ export async function deleteMasterAdminStaffData(
 
   await db.transaction(async (tx) => {
     await tx
-      .delete(attendance)
-      .where(inArray(attendance.employeeId, userIds));
+      .update(attendance)
+      .set({
+        isDeleted: true,
+        deletedAt: new Date(),
+        deletedBy: authUser.userId,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          inArray(attendance.employeeId, userIds),
+          eq(attendance.isDeleted, false)
+        )
+      );
 
-    await tx.delete(users).where(inArray(users.id, userIds));
+    await tx
+      .update(users)
+      .set({
+        isDeleted: true,
+        deletedAt: new Date(),
+        status: "DISABLED",
+        updatedAt: new Date(),
+      })
+      .where(inArray(users.id, userIds));
   });
 
   return {
     success: true,
     message: `${matched.length} staff record(s) deleted successfully`,
   };
+}
+
+export async function deleteMasterAdminStaff(
+  authUser: AuthUser,
+  staffIds: string[]
+) {
+  if (authUser.role !== "MASTER_ADMIN") {
+    throw new AppError(403, "Only MASTER_ADMIN can permanently delete staff");
+  }
+
+  if (!authUser.companyId) {
+    throw new AppError(403, "Company context is required");
+  }
+
+  if (!staffIds.length) {
+    throw new AppError(400, "At least one staff ID is required");
+  }
+
+  const companyId = authUser.companyId as string;
+
+  const matchedStaff = await db
+    .select({
+      id: users.id,
+      companyId: users.companyId,
+    })
+    .from(users)
+    .where(
+      and(
+        inArray(users.id, staffIds),
+        eq(users.role, "STAFF"),
+        eq(users.isDeleted, false)
+      )
+    );
+
+  if (matchedStaff.length === 0) {
+    throw new AppError(404, "No staff members found");
+  }
+
+  if (matchedStaff.some((s) => s.companyId !== companyId)) {
+    throw new AppError(
+      403,
+      "You do not have permission to delete one or more selected staff members"
+    );
+  }
+
+  const matchedIds = matchedStaff.map((s) => s.id);
+
+  const deleted = await db.transaction(async (tx) => {
+    // Attendance must be removed first because attendance.employee_id
+    // is NOT NULL and references users.id with no ON DELETE action.
+    // Only the selected staff's attendance is removed.
+    await tx
+      .delete(attendance)
+      .where(inArray(attendance.employeeId, matchedIds));
+
+    return await tx
+      .delete(users)
+      .where(
+        and(
+          inArray(users.id, matchedIds),
+          eq(users.companyId, companyId),
+          eq(users.role, "STAFF"),
+          eq(users.isDeleted, false)
+        )
+      )
+      .returning({
+        id: users.id,
+        employeeId: users.employeeId,
+        name: users.name,
+      });
+  });
+
+  return {
+    success: true,
+    message: "Staff permanently deleted",
+    count: deleted.length,
+    data: deleted,
+  };
+}
+
+export async function updateMasterAdminStaff(
+  authUser: AuthUser,
+  staffId: string,
+  input: { name: string; phone?: string; designation?: string }
+) {
+  if (authUser.role !== "MASTER_ADMIN") {
+    throw new AppError(403, "Only MASTER_ADMIN can update staff");
+  }
+
+  if (!authUser.companyId) {
+    throw new AppError(403, "Company context is required");
+  }
+
+  const companyId = authUser.companyId as string;
+
+  const [staff] = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(
+      and(
+        eq(users.id, staffId),
+        eq(users.companyId, companyId),
+        eq(users.role, "STAFF"),
+        eq(users.isDeleted, false)
+      )
+    )
+    .limit(1);
+
+  if (!staff) {
+    throw new AppError(404, "Staff member not found");
+  }
+
+  const [updated] = await db
+    .update(users)
+    .set({
+      name: input.name.trim(),
+      phone: input.phone ? input.phone.trim() : null,
+      designation: input.designation ? input.designation.trim() : null,
+      updatedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(users.id, staffId),
+        eq(users.companyId, companyId),
+        eq(users.role, "STAFF")
+      )
+    )
+    .returning({
+      id: users.id,
+      employeeId: users.employeeId,
+      name: users.name,
+      phone: users.phone,
+      designation: users.designation,
+    });
+
+  return { success: true, message: "Staff updated successfully", data: updated };
+}
+
+export async function updateMasterAdminAdmin(
+  authUser: AuthUser,
+  adminId: string,
+  input: { name: string; phone?: string; designation?: string }
+) {
+  if (authUser.role !== "MASTER_ADMIN") {
+    throw new AppError(403, "Only MASTER_ADMIN can update admins");
+  }
+
+  if (!authUser.companyId) {
+    throw new AppError(403, "Company context is required");
+  }
+
+  const companyId = authUser.companyId as string;
+
+  const [admin] = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(
+      and(
+        eq(users.id, adminId),
+        eq(users.companyId, companyId),
+        eq(users.role, "ADMIN"),
+        eq(users.isDeleted, false)
+      )
+    )
+    .limit(1);
+
+  if (!admin) {
+    throw new AppError(404, "Admin not found");
+  }
+
+  const [updated] = await db
+    .update(users)
+    .set({
+      name: input.name.trim(),
+      phone: input.phone ? input.phone.trim() : null,
+      designation: input.designation ? input.designation.trim() : null,
+      updatedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(users.id, adminId),
+        eq(users.companyId, companyId),
+        eq(users.role, "ADMIN")
+      )
+    )
+    .returning({
+      id: users.id,
+      employeeId: users.employeeId,
+      name: users.name,
+      phone: users.phone,
+      designation: users.designation,
+    });
+
+  return { success: true, message: "Admin updated successfully", data: updated };
 }
 
 export async function getMasterAdminStaffDataPreview(
@@ -1227,7 +1455,11 @@ export async function getMasterAdminStaffDataPreview(
     }
   }
 
-  const conditions: any[] = [eq(users.companyId, authUser.companyId)];
+  const conditions: any[] = [
+    eq(users.companyId, authUser.companyId),
+    eq(users.role, "STAFF"),
+    eq(users.isDeleted, false),
+  ];
 
   if (input.departmentId) {
     conditions.push(eq(users.departmentId, input.departmentId));

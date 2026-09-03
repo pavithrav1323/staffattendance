@@ -18,7 +18,9 @@ import {
   createDepartmentSchema,
   deleteAttendanceRecordsSchema,
   deleteStaffDataSchema,
+  deleteStaffIdsSchema,
   updateAttendanceTimeSchema,
+  updateUserSchema,
 } from "../modules/master-admin/master-admin.schema.js";
 
 import {
@@ -35,7 +37,10 @@ import {
   getMasterAdminAttendanceRecordsPreview,
   getMasterAdminStaffDataPreview,
   updateMasterAdminAttendanceTime,
+  updateMasterAdminStaff,
+  updateMasterAdminAdmin,
   deleteMasterAdminStaffData,
+  deleteMasterAdminStaff,
   deleteMasterAdminAttendanceRecords,
 } from "../modules/master-admin/master-admin.service.js";
 
@@ -268,6 +273,34 @@ router.patch(
         success: true,
         message: "Admin deactivated successfully.",
       });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * PATCH /api/master-admin/admins/:id
+ */
+router.patch(
+  "/admins/:id",
+  ...masterAdminAccess,
+  validateBody(updateUserSchema),
+  async (
+    req: AuthRequest,
+    res: Response,
+    next: NextFunction
+  ) => {
+    try {
+      const adminId = String(req.params.id);
+
+      const result = await updateMasterAdminAdmin(
+        req.user!,
+        adminId,
+        req.body
+      );
+
+      res.status(200).json(result);
     } catch (error) {
       next(error);
     }
@@ -779,6 +812,62 @@ router.patch(
         message: "Staff deactivated successfully.",
         data,
       });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * PATCH /api/master-admin/staff/:id
+ */
+router.patch(
+  "/staff/:id",
+  ...masterAdminAccess,
+  validateBody(updateUserSchema),
+  async (
+    req: AuthRequest,
+    res: Response,
+    next: NextFunction
+  ) => {
+    try {
+      const staffId = String(req.params.id);
+
+      const result = await updateMasterAdminStaff(
+        req.user!,
+        staffId,
+        req.body
+      );
+
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * DELETE /api/master-admin/staff/permanent
+ * Permanently delete selected staff members (Master Admin only)
+ */
+router.delete(
+  "/staff/permanent",
+  ...masterAdminAccess,
+  validateBody(deleteStaffIdsSchema),
+  async (
+    req: AuthRequest,
+    res: Response,
+    next: NextFunction
+  ) => {
+    try {
+      const { staffIds } = req.body;
+
+      const result = await deleteMasterAdminStaff(
+        req.user!,
+        staffIds
+      );
+
+      res.status(200).json(result);
     } catch (error) {
       next(error);
     }

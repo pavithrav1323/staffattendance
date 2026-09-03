@@ -45,6 +45,12 @@ const MasterAdminAdmins = ({ admins, departments, onSuccess, onDepartmentCreated
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
+  const [editingAdmin, setEditingAdmin] = useState<Admin | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editPhone, setEditPhone] = useState('');
+  const [editDesignation, setEditDesignation] = useState('');
+  const [editLoading, setEditLoading] = useState(false);
+
   // Inline validation errors
   const [employeeIdError, setEmployeeIdError] = useState('');
   const [nameError, setNameError] = useState('');
@@ -320,6 +326,50 @@ const MasterAdminAdmins = ({ admins, departments, onSuccess, onDepartmentCreated
     }
   };
 
+  const handleOpenEditAdmin = (admin: Admin) => {
+    setEditingAdmin(admin);
+    setEditName(admin.name);
+    setEditPhone(admin.phone || '');
+    setEditDesignation(admin.designation || '');
+  };
+
+  const closeEditModal = () => {
+    setEditingAdmin(null);
+    setEditName('');
+    setEditPhone('');
+    setEditDesignation('');
+    setEditLoading(false);
+  };
+
+  const handleEditAdmin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingAdmin) return;
+
+    setEditLoading(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      const response = await masterAdminService.updateAdmin(editingAdmin.id, {
+        name: editName.trim(),
+        phone: editPhone.trim(),
+        designation: editDesignation.trim(),
+      });
+
+      if (response.success) {
+        setSuccess('Admin updated successfully');
+        closeEditModal();
+        onSuccess();
+      } else {
+        setError(response.message || 'Failed to update admin');
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to update admin');
+    } finally {
+      setEditLoading(false);
+    }
+  };
+
   const handlePhoneChange = (value: string) => {
     const digits = value.replace(/\D/g, '');
     const max = getPhoneMaxLength(selectedCountry.code);
@@ -581,6 +631,14 @@ const MasterAdminAdmins = ({ admins, departments, onSuccess, onDepartmentCreated
                         </button>
                       )}
                       <button
+                        onClick={() => handleOpenEditAdmin(admin)}
+                        disabled={editLoading}
+                        className="action-button"
+                        type="button"
+                      >
+                        Edit
+                      </button>
+                      <button
                         onClick={() => handleDelete(admin.id)}
                         disabled={loading}
                         className="action-button delete-button"
@@ -593,6 +651,76 @@ const MasterAdminAdmins = ({ admins, departments, onSuccess, onDepartmentCreated
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {editingAdmin && (
+        <div className="modal-overlay" onClick={closeEditModal}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h3>Edit Admin</h3>
+            <p className="modal-subtitle">
+              Admin: <strong>{editingAdmin.name}</strong>
+              <br />
+              Admin ID: <strong>{editingAdmin.employeeId}</strong>
+            </p>
+
+            <form onSubmit={handleEditAdmin}>
+              <div className="form-group">
+                <label htmlFor="editName">Name</label>
+                <input
+                  id="editName"
+                  type="text"
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  placeholder="Enter name"
+                  className="staff-search-input"
+                  required
+                />
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="editPhone">Phone</label>
+                <input
+                  id="editPhone"
+                  type="text"
+                  value={editPhone}
+                  onChange={(e) => setEditPhone(e.target.value)}
+                  placeholder="Enter phone"
+                  className="staff-search-input"
+                />
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="editDesignation">Designation</label>
+                <input
+                  id="editDesignation"
+                  type="text"
+                  value={editDesignation}
+                  onChange={(e) => setEditDesignation(e.target.value)}
+                  placeholder="Enter designation"
+                  className="staff-search-input"
+                />
+              </div>
+
+              <div className="modal-actions">
+                <button
+                  type="button"
+                  onClick={closeEditModal}
+                  className="reject-button"
+                  disabled={editLoading}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="approve-button"
+                  disabled={editLoading}
+                >
+                  {editLoading ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </div>
