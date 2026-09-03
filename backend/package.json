@@ -9,7 +9,7 @@
     "start": "node dist/server.js",
     "db:test": "tsx src/db/test-connection.ts",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate",
+    "db:migrate": "node ./node_modules/drizzle-kit/bin.cjs migrate",
     "geo:test": "tsx src/utils/geofence.test.ts"
   },
   "dependencies": {
