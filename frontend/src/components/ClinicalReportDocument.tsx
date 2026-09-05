@@ -106,7 +106,6 @@ const ClinicalReportDocument = forwardRef<HTMLDivElement, ClinicalReportDocument
       language,
       unitLocation,
       monitoringDateTime,
-      reportNumber,
       rows,
       onUnitLocationChange,
       onMonitoringDateTimeChange,
