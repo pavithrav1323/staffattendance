@@ -426,7 +426,7 @@ export const masterAdminService = {
 
   updateStaff: async (
     staffId: string,
-    data: { name: string; phone: string; designation: string }
+    data: { employeeId: string; name: string; phone: string; designation: string }
   ): Promise<{ success: boolean; message: string; data?: any }> => {
     return apiRequest(`/master-admin/staff/${staffId}`, 'PATCH', data);
   },

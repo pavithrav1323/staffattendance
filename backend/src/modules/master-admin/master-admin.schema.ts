@@ -92,3 +92,13 @@ export const updateUserSchema = z.object({
 
 export type UpdateUserInput =
   z.infer<typeof updateUserSchema>;
+
+export const updateStaffSchema = z.object({
+  employeeId: z.string().trim().min(1, "Employee ID is required"),
+  name: z.string().trim().min(2).max(150),
+  phone: z.string().trim().max(30).optional().or(z.literal("")),
+  designation: z.string().trim().max(100).optional().or(z.literal("")),
+});
+
+export type UpdateStaffInput =
+  z.infer<typeof updateStaffSchema>;

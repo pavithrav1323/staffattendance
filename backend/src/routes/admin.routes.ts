@@ -22,6 +22,7 @@ import {
   activateStaff,
   approveStaff,
   deactivateStaff,
+  deleteAdminAttendanceRecords,
   deleteDeletedStaffAttendance,
   deleteStaff,
   getAdminAttendance,
@@ -543,6 +544,33 @@ router.patch(
 /**
  * GET /api/admin/attendance/summary
  */
+router.delete(
+  "/attendance/records",
+  authenticateToken,
+  allowRoles("ADMIN", "MASTER_ADMIN"),
+  requireCompanyContext,
+  async (
+    req: AuthRequest,
+    res: Response,
+    next: NextFunction
+  ) => {
+    try {
+      const attendanceIds = Array.isArray(req.body.attendanceIds)
+        ? req.body.attendanceIds.map(String)
+        : [];
+
+      const result = await deleteAdminAttendanceRecords(
+        req.user!,
+        attendanceIds
+      );
+
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
 router.get(
   "/attendance/summary",
   authenticateToken,

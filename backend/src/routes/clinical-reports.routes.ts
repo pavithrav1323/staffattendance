@@ -9,11 +9,16 @@ import { requireCompanyContext } from "../middleware/tenant.middleware.js";
 import { validateBody } from "../middleware/validate.middleware.js";
 import {
   createClinicalReport,
+  generateDocxForReport,
   generatePdfForReport,
   getClinicalReportById,
   getClinicalReports,
+  updateClinicalReport,
 } from "../modules/clinical-reports/clinical-reports.service.js";
-import { createClinicalReportSchema } from "../modules/clinical-reports/clinical-reports.schema.js";
+import {
+  createClinicalReportSchema,
+  updateClinicalReportSchema,
+} from "../modules/clinical-reports/clinical-reports.schema.js";
 
 const router = Router();
 
@@ -98,6 +103,38 @@ router.get(
 );
 
 /**
+ * PUT /api/clinical-reports/:id
+ */
+router.put(
+  "/:id",
+  ...authenticatedAccess,
+  allowRoles("STAFF"),
+  validateBody(updateClinicalReportSchema),
+  async (
+    req: AuthRequest,
+    res: Response,
+    next: NextFunction
+  ) => {
+    try {
+      const reportId = req.params.id as string;
+      const report = await updateClinicalReport(
+        req.user!,
+        reportId,
+        req.body
+      );
+
+      res.status(200).json({
+        success: true,
+        message: "Clinical report updated successfully",
+        data: report,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
  * GET /api/clinical-reports/:id/pdf
  */
 router.get(
@@ -119,6 +156,37 @@ router.get(
       );
       res.setHeader("Content-Type", "application/pdf");
       res.send(pdfBuffer);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * GET /api/clinical-reports/:id/docx
+ */
+router.get(
+  "/:id/docx",
+  ...authenticatedAccess,
+  allowRoles("STAFF", "ADMIN", "MASTER_ADMIN"),
+  async (
+    req: AuthRequest,
+    res: Response,
+    next: NextFunction
+  ) => {
+    try {
+      const reportId = req.params.id as string;
+      const docxBuffer = await generateDocxForReport(req.user!, reportId);
+
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="clinical-report-${reportId}.docx"`
+      );
+      res.setHeader(
+        "Content-Type",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+      );
+      res.send(docxBuffer);
     } catch (error) {
       next(error);
     }

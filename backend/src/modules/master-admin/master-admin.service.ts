@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, ilike, inArray, lte, sql } from "drizzle-orm";
+import { and, desc, eq, gte, ilike, inArray, lte, ne, sql } from "drizzle-orm";
 
 import { db } from "../../db/connection.js";
 import { attendance } from "../../db/schema/attendance.js";
@@ -17,6 +17,7 @@ import type {
   CreateAdminInput,
   DeleteAttendanceRecordsInput,
   DeleteStaffDataInput,
+  UpdateStaffInput,
 } from "./master-admin.schema.js";
 import {
   getDateInTimeZone,
@@ -1289,7 +1290,7 @@ export async function deleteMasterAdminStaff(
 export async function updateMasterAdminStaff(
   authUser: AuthUser,
   staffId: string,
-  input: { name: string; phone?: string; designation?: string }
+  input: UpdateStaffInput
 ) {
   if (authUser.role !== "MASTER_ADMIN") {
     throw new AppError(403, "Only MASTER_ADMIN can update staff");
@@ -1302,7 +1303,7 @@ export async function updateMasterAdminStaff(
   const companyId = authUser.companyId as string;
 
   const [staff] = await db
-    .select({ id: users.id })
+    .select({ id: users.id, employeeId: users.employeeId })
     .from(users)
     .where(
       and(
@@ -1318,9 +1319,32 @@ export async function updateMasterAdminStaff(
     throw new AppError(404, "Staff member not found");
   }
 
+  const normalizedEmployeeId = normalizeEmployeeId(input.employeeId);
+
+  // Verify uniqueness only when the employee ID is actually changing
+  if (staff.employeeId !== normalizedEmployeeId) {
+    const [existing] = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(
+        and(
+          eq(users.companyId, companyId),
+          eq(users.employeeId, normalizedEmployeeId),
+          eq(users.isDeleted, false),
+          ne(users.id, staffId)
+        )
+      )
+      .limit(1);
+
+    if (existing) {
+      throw new AppError(409, "Employee ID already exists for this company.");
+    }
+  }
+
   const [updated] = await db
     .update(users)
     .set({
+      employeeId: normalizedEmployeeId,
       name: input.name.trim(),
       phone: input.phone ? input.phone.trim() : null,
       designation: input.designation ? input.designation.trim() : null,

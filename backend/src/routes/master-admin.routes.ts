@@ -20,6 +20,7 @@ import {
   deleteStaffDataSchema,
   deleteStaffIdsSchema,
   updateAttendanceTimeSchema,
+  updateStaffSchema,
   updateUserSchema,
 } from "../modules/master-admin/master-admin.schema.js";
 
@@ -824,7 +825,7 @@ router.patch(
 router.patch(
   "/staff/:id",
   ...masterAdminAccess,
-  validateBody(updateUserSchema),
+  validateBody(updateStaffSchema),
   async (
     req: AuthRequest,
     res: Response,

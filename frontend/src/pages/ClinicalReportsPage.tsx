@@ -1,15 +1,24 @@
 import { useEffect, useState } from 'react';
 import { authService } from '../services/auth.service';
-import { clinicalReportsService, type ClinicalReport } from '../services/clinical-reports.service';
+import { clinicalReportsService, type ClinicalReportListItem, type ClinicalReportDetail, type ReportTrainee } from '../services/clinical-reports.service';
+import ClinicalReportDocument, { emptyRow, type ReportRow } from '../components/ClinicalReportDocument';
 
 type Language = 'en' | 'ms';
+
+interface PreviewData {
+  id?: string;
+  reportNumber?: string;
+  unitLocation: string;
+  monitoringDateTime: string;
+  rows: ReportRow[];
+  language: Language;
+}
 
 const labels = {
   en: {
     pageTitle: 'Clinical Report',
-    ministry: 'Ministry of Health Malaysia',
-    title: 'Clinical Area Monitoring Report',
     unitLocation: 'Unit / Location',
+    dateTime: 'Date & Time of Monitoring',
     traineeName: 'Trainee Name',
     group: 'Group',
     monitoringObjective: 'Monitoring Objective',
@@ -25,9 +34,15 @@ const labels = {
     reportId: 'Report ID',
     submittedBy: 'Submitted By',
     submittedAt: 'Submitted At',
+    monitoringAt: 'Monitoring Date & Time',
+    traineeCount: 'Trainees',
     actions: 'Actions',
-    view: 'View',
-    download: 'Download PDF',
+    view: 'View Report',
+    downloadDocx: 'Download DOCX',
+    edit: 'Edit',
+    update: 'Update Clinical Report',
+    updating: 'Updating...',
+    updateSuccess: 'Clinical report updated successfully.',
     close: 'Close',
     english: 'English',
     malay: 'Malay',
@@ -35,12 +50,17 @@ const labels = {
     error: 'Failed to submit. Please check all required fields.',
     invalid: 'All required fields must be filled.',
     required: ' (required)',
+    traineeRow: 'Trainee',
+    addRow: 'Add Trainee',
+    removeRow: 'Remove Trainee',
+    viewReport: 'View Report',
+    downloadPdf: 'Download PDF',
+    newReport: 'New Report',
   },
   ms: {
     pageTitle: 'Laporan Klinikal',
-    ministry: 'Kementerian Kesihatan Malaysia',
-    title: 'Laporan Pemantauan Kawasan Klinikal',
     unitLocation: 'Unit / Lokasi',
+    dateTime: 'Tarikh & Masa Pemantauan',
     traineeName: 'Nama Pelatih',
     group: 'Kumpulan',
     monitoringObjective: 'Objektif Pemantauan',
@@ -56,9 +76,15 @@ const labels = {
     reportId: 'ID Laporan',
     submittedBy: 'Dihantar Oleh',
     submittedAt: 'Tarikh Hantar',
+    monitoringAt: 'Tarikh & Masa Pemantauan',
+    traineeCount: 'Pelatih',
     actions: 'Tindakan',
-    view: 'Lihat',
-    download: 'Muat Turun PDF',
+    view: 'Lihat Laporan',
+    downloadDocx: 'Muat Turun DOCX',
+    edit: 'Sunting',
+    update: 'Kemas Kini Laporan Klinikal',
+    updating: 'Sedang mengemas kini...',
+    updateSuccess: 'Laporan klinikal berjaya dikemas kini.',
     close: 'Tutup',
     english: 'English',
     malay: 'Malay',
@@ -66,17 +92,19 @@ const labels = {
     error: 'Gagal menghantar. Sila semak semua medan yang diperlukan.',
     invalid: 'Semua medan yang diperlukan mesti diisi.',
     required: ' (diperlukan)',
+    traineeRow: 'Pelatih',
+    addRow: 'Tambah Pelatih',
+    removeRow: 'Buang Pelatih',
+    viewReport: 'Lihat Laporan',
+    downloadPdf: 'Muat Turun PDF',
+    newReport: 'Laporan Baharu',
   },
 };
 
 const initialForm = {
   unitLocation: '',
-  traineeName: '',
-  group: '',
-  monitoringObjective: '',
-  teachingLearningActivities: '',
-  clinicalPracticeRecordBook: '',
-  disciplineTraineeWelfareDiscussion: '',
+  monitoringDateTime: '',
+  rows: [emptyRow()],
 };
 
 const ClinicalReportsPage = () => {
@@ -85,12 +113,14 @@ const ClinicalReportsPage = () => {
 
   const [language, setLanguage] = useState<Language>('en');
   const [form, setForm] = useState(initialForm);
-  const [reports, setReports] = useState<ClinicalReport[]>([]);
+  const [preview, setPreview] = useState<PreviewData | null>(null);
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
+  const [reports, setReports] = useState<ClinicalReportListItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [editingReportId, setEditingReportId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [selectedReport, setSelectedReport] = useState<ClinicalReport | null>(null);
 
   const t = labels[language];
 
@@ -112,16 +142,32 @@ const ClinicalReportsPage = () => {
     loadReports();
   }, []);
 
-  const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
-  ) => {
-    const { name, value } = e.target;
-    setForm((prev) => ({ ...prev, [name]: value }));
+  const handleRowChange = (index: number, field: keyof ReportRow, value: string) => {
+    setForm((prev) => {
+      const rows = [...prev.rows];
+      rows[index] = { ...rows[index], [field]: value };
+      return { ...prev, rows };
+    });
+  };
+
+  const addRow = () => {
+    setForm((prev) => ({ ...prev, rows: [...prev.rows, emptyRow()] }));
+  };
+
+  const removeRow = (index: number) => {
+    setForm((prev) => {
+      if (prev.rows.length <= 1) return prev;
+      const rows = [...prev.rows];
+      rows.splice(index, 1);
+      return { ...prev, rows };
+    });
   };
 
   const validate = (): boolean => {
-    const values = Object.values(form).map((v) => v.trim());
-    return values.every((v) => v.length > 0);
+    if (!form.unitLocation.trim() || !form.monitoringDateTime.trim()) return false;
+    return form.rows.every((row) =>
+      Object.values(row).every((v) => v.trim().length > 0)
+    );
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -138,17 +184,51 @@ const ClinicalReportsPage = () => {
 
     setSubmitting(true);
     try {
-      const response = await clinicalReportsService.create({
-        ...form,
+      const input = {
+        unitLocation: form.unitLocation,
+        monitoringDateTime: form.monitoringDateTime,
         language,
-      });
+        trainees: form.rows,
+      };
 
-      if (response.success) {
+      if (editingReportId) {
+        const response = await clinicalReportsService.update(editingReportId, input);
+
+        if (!response.success || !response.data) {
+          throw new Error(response.message || t.error);
+        }
+
+        const updated = response.data;
+        setPreview({
+          id: updated.id,
+          reportNumber: updated.reportNumber ?? undefined,
+          unitLocation: updated.unitLocation,
+          monitoringDateTime: updated.monitoringDateTime,
+          rows: updated.trainees.map((trainee) => ({ ...trainee })),
+          language: updated.language as Language,
+        });
+        setSuccess(t.updateSuccess);
+        setForm(initialForm);
+        setEditingReportId(null);
+        loadReports();
+      } else {
+        const response = await clinicalReportsService.create(input);
+
+        if (!response.success) {
+          throw new Error(response.message || t.error);
+        }
+
+        setPreview({
+          id: response.data?.id,
+          reportNumber: response.data?.reportNumber ?? undefined,
+          unitLocation: form.unitLocation,
+          monitoringDateTime: form.monitoringDateTime,
+          rows: form.rows,
+          language,
+        });
         setSuccess(t.success);
         setForm(initialForm);
         loadReports();
-      } else {
-        setError(response.message || t.error);
       }
     } catch (err: any) {
       setError(err.message || t.error);
@@ -157,11 +237,72 @@ const ClinicalReportsPage = () => {
     }
   };
 
-  const handleDownload = async (id: string) => {
+  const handleDownload = async () => {
+    if (!preview?.id) return;
     try {
-      await clinicalReportsService.downloadPdf(id);
+      await clinicalReportsService.downloadPdf(preview.id);
     } catch (err: any) {
       setError(err.message || 'Failed to download PDF');
+    }
+  };
+
+  const handleDownloadDocx = async () => {
+    if (!preview?.id) return;
+    try {
+      await clinicalReportsService.downloadDocx(preview.id);
+    } catch (err: any) {
+      setError(err.message || 'Failed to download DOCX');
+    }
+  };
+
+  const handleViewFromList = async (report: ClinicalReportListItem) => {
+    try {
+      const response = await clinicalReportsService.getReport(report.id);
+      if (!response.success || !response.data) {
+        throw new Error(response.message || 'Failed to load report');
+      }
+
+      const detail = response.data as ClinicalReportDetail;
+      setPreview({
+        id: detail.id,
+        reportNumber: detail.reportNumber ?? undefined,
+        unitLocation: detail.unitLocation,
+        monitoringDateTime: detail.monitoringDateTime,
+        rows: (detail.trainees as ReportTrainee[]).map((trainee) => ({ ...trainee })),
+        language: detail.language as Language,
+      });
+      setShowPreviewModal(true);
+    } catch (err: any) {
+      setError(err.message || 'Failed to load report');
+    }
+  };
+
+  const toDateTimeLocal = (value: string) => {
+    const d = new Date(value);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  };
+
+  const handleEdit = async (report: ClinicalReportListItem) => {
+    setError(null);
+    setSuccess(null);
+    setPreview(null);
+    try {
+      const response = await clinicalReportsService.getReport(report.id);
+      if (!response.success || !response.data) {
+        throw new Error(response.message || 'Failed to load report');
+      }
+      const detail = response.data;
+      setLanguage(detail.language as Language);
+      setForm({
+        unitLocation: detail.unitLocation,
+        monitoringDateTime: toDateTimeLocal(detail.monitoringDateTime),
+        rows: detail.trainees.map((trainee) => ({ ...trainee })),
+      });
+      setEditingReportId(detail.id);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } catch (err: any) {
+      setError(err.message || 'Failed to load report');
     }
   };
 
@@ -176,184 +317,260 @@ const ClinicalReportsPage = () => {
   };
 
   const renderForm = () => (
-    <form onSubmit={handleSubmit} className="clinical-form">
+    <form onSubmit={handleSubmit} className="clinical-form no-print">
       <div className="form-group">
         <label htmlFor="unitLocation">{t.unitLocation}{t.required}</label>
         <input
           id="unitLocation"
-          name="unitLocation"
           type="text"
-          className="staff-search-input"
           value={form.unitLocation}
-          onChange={handleChange}
+          onChange={(e) => setForm((prev) => ({ ...prev, unitLocation: e.target.value }))}
           maxLength={200}
           required
         />
       </div>
 
       <div className="form-group">
-        <label htmlFor="traineeName">{t.traineeName}{t.required}</label>
+        <label htmlFor="monitoringDateTime">{t.dateTime}{t.required}</label>
         <input
-          id="traineeName"
-          name="traineeName"
-          type="text"
-          className="staff-search-input"
-          value={form.traineeName}
-          onChange={handleChange}
-          maxLength={150}
+          id="monitoringDateTime"
+          type="datetime-local"
+          value={form.monitoringDateTime}
+          onChange={(e) => setForm((prev) => ({ ...prev, monitoringDateTime: e.target.value }))}
           required
         />
       </div>
 
-      <div className="form-group">
-        <label htmlFor="group">{t.group}{t.required}</label>
-        <input
-          id="group"
-          name="group"
-          type="text"
-          className="staff-search-input"
-          value={form.group}
-          onChange={handleChange}
-          maxLength={100}
-          required
-        />
-      </div>
+      {form.rows.map((row, index) => (
+        <div key={index} className="clinical-row-form">
+          <div className="clinical-row-header">
+            <h4>{t.traineeRow} {index + 1}</h4>
+            {form.rows.length > 1 && (
+              <button
+                type="button"
+                className="action-button small"
+                onClick={() => removeRow(index)}
+              >
+                {t.removeRow}
+              </button>
+            )}
+          </div>
 
-      <div className="form-group">
-        <label htmlFor="monitoringObjective">{t.monitoringObjective}{t.required}</label>
-        <textarea
-          id="monitoringObjective"
-          name="monitoringObjective"
-          className="staff-search-input"
-          rows={3}
-          value={form.monitoringObjective}
-          onChange={handleChange}
-          maxLength={2000}
-          required
-        />
-      </div>
+          <div className="form-group">
+            <label>{t.traineeName}{t.required}</label>
+            <input
+              type="text"
+              value={row.traineeName}
+              onChange={(e) => handleRowChange(index, 'traineeName', e.target.value)}
+              maxLength={150}
+              required
+            />
+          </div>
 
-      <div className="form-group">
-        <label htmlFor="teachingLearningActivities">{t.teachingLearningActivities}{t.required}</label>
-        <textarea
-          id="teachingLearningActivities"
-          name="teachingLearningActivities"
-          className="staff-search-input"
-          rows={5}
-          value={form.teachingLearningActivities}
-          onChange={handleChange}
-          maxLength={4000}
-          required
-        />
-      </div>
+          <div className="form-group">
+            <label>{t.group}{t.required}</label>
+            <input
+              type="text"
+              value={row.group}
+              onChange={(e) => handleRowChange(index, 'group', e.target.value)}
+              maxLength={100}
+              required
+            />
+          </div>
 
-      <div className="form-group">
-        <label htmlFor="clinicalPracticeRecordBook">{t.clinicalPracticeRecordBook}{t.required}</label>
-        <textarea
-          id="clinicalPracticeRecordBook"
-          name="clinicalPracticeRecordBook"
-          className="staff-search-input"
-          rows={5}
-          value={form.clinicalPracticeRecordBook}
-          onChange={handleChange}
-          maxLength={4000}
-          required
-        />
-      </div>
+          <div className="form-group">
+            <label>{t.monitoringObjective}{t.required}</label>
+            <textarea
+              rows={3}
+              value={row.monitoringObjective}
+              onChange={(e) => handleRowChange(index, 'monitoringObjective', e.target.value)}
+              maxLength={2000}
+              required
+            />
+          </div>
 
-      <div className="form-group">
-        <label htmlFor="disciplineTraineeWelfareDiscussion">{t.disciplineTraineeWelfareDiscussion}{t.required}</label>
-        <textarea
-          id="disciplineTraineeWelfareDiscussion"
-          name="disciplineTraineeWelfareDiscussion"
-          className="staff-search-input"
-          rows={5}
-          value={form.disciplineTraineeWelfareDiscussion}
-          onChange={handleChange}
-          maxLength={4000}
-          required
-        />
-      </div>
+          <div className="form-group">
+            <label>{t.teachingLearningActivities}{t.required}</label>
+            <textarea
+              rows={4}
+              value={row.teachingLearningActivities}
+              onChange={(e) => handleRowChange(index, 'teachingLearningActivities', e.target.value)}
+              maxLength={4000}
+              required
+            />
+          </div>
 
-      <div className="form-actions">
+          <div className="form-group">
+            <label>{t.clinicalPracticeRecordBook}{t.required}</label>
+            <textarea
+              rows={4}
+              value={row.clinicalPracticeRecordBook}
+              onChange={(e) => handleRowChange(index, 'clinicalPracticeRecordBook', e.target.value)}
+              maxLength={4000}
+              required
+            />
+          </div>
+
+          <div className="form-group">
+            <label>{t.disciplineTraineeWelfareDiscussion}{t.required}</label>
+            <textarea
+              rows={4}
+              value={row.disciplineTraineeWelfareDiscussion}
+              onChange={(e) => handleRowChange(index, 'disciplineTraineeWelfareDiscussion', e.target.value)}
+              maxLength={4000}
+              required
+            />
+          </div>
+        </div>
+      ))}
+
+      <div className="clinical-form-actions no-print">
+        <button
+          type="button"
+          className="action-button"
+          onClick={addRow}
+          disabled={submitting}
+        >
+          {t.addRow}
+        </button>
         <button
           type="submit"
           className="approve-button"
           disabled={submitting}
         >
-          {submitting ? t.submitting : t.submit}
+          {submitting ? (editingReportId ? t.updating : t.submitting) : (editingReportId ? t.update : t.submit)}
         </button>
       </div>
     </form>
   );
 
+  const renderPreviewModal = () => {
+    if (!preview) return null;
+    return (
+      <div className="modal-overlay" onClick={() => setShowPreviewModal(false)}>
+        <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-actions no-print clinical-preview-modal-actions">
+            <button
+              type="button"
+              className="approve-button"
+              onClick={handleDownload}
+            >
+              {t.downloadPdf}
+            </button>
+            <button
+              type="button"
+              className="approve-button"
+              onClick={handleDownloadDocx}
+            >
+              {t.downloadDocx}
+            </button>
+            <button
+              type="button"
+              className="reject-button"
+              onClick={() => setShowPreviewModal(false)}
+            >
+              {t.close}
+            </button>
+          </div>
+          <ClinicalReportDocument
+            language={preview.language}
+            unitLocation={preview.unitLocation}
+            monitoringDateTime={preview.monitoringDateTime}
+            reportNumber={preview.reportNumber}
+            rows={preview.rows}
+            showActions={false}
+          />
+        </div>
+      </div>
+    );
+  };
+
   const renderList = () => (
-    <div className="table-container">
-      {reports.length === 0 ? (
+    <div className="clinical-reports-list no-print">
+      {loading ? (
+        <div className="loading-state">Loading...</div>
+      ) : reports.length === 0 ? (
         <div className="empty-state">{t.noReports}</div>
       ) : (
-        <table className="staff-table">
-          <thead>
-            <tr>
-              <th>{t.reportId}</th>
-              <th>{t.unitLocation}</th>
-              <th>{t.traineeName}</th>
-              <th>{t.group}</th>
-              {!isStaff && <th>{t.submittedBy}</th>}
-              <th>{t.submittedAt}</th>
-              <th>{t.actions}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {reports.map((report) => (
-              <tr key={report.id}>
-                <td>{report.id.slice(0, 8)}</td>
-                <td>{report.unitLocation}</td>
-                <td>{report.traineeName}</td>
-                <td>{report.group}</td>
-                {!isStaff && <td>{report.submittedByName || report.submittedBy}</td>}
-                <td>{formatDate(report.createdAt)}</td>
-                <td>
-                  <div className="staff-actions">
-                    <button
-                      onClick={() => setSelectedReport(report)}
-                      className="action-button"
-                      type="button"
-                    >
-                      {t.view}
-                    </button>
-                    <button
-                      onClick={() => handleDownload(report.id)}
-                      className="action-button activate-button"
-                      type="button"
-                    >
-                      {t.download}
-                    </button>
-                  </div>
-                </td>
+        <div className="table-container">
+          <table className="staff-table">
+            <thead>
+              <tr>
+                <th>{t.reportId}</th>
+                <th>{t.unitLocation}</th>
+                <th>{t.monitoringAt}</th>
+                <th>{t.traineeCount}</th>
+                {!isStaff && <th>{t.submittedBy}</th>}
+                <th>{t.submittedAt}</th>
+                <th className="clinical-actions-cell">{t.actions}</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {reports.map((report) => (
+                <tr key={report.id}>
+                  <td>{report.reportNumber || report.id.slice(0, 8)}</td>
+                  <td>{report.unitLocation}</td>
+                  <td>{formatDate(report.monitoringDateTime)}</td>
+                  <td>{report.traineeCount}</td>
+                  {!isStaff && <td>{report.submittedByName || report.submittedBy}</td>}
+                  <td>{formatDate(report.createdAt)}</td>
+                  <td className="clinical-actions-cell">
+                    <div className="clinical-row-actions">
+                      <button
+                        type="button"
+                        className="clinical-action-button"
+                        onClick={() => handleViewFromList(report)}
+                      >
+                        {t.view}
+                      </button>
+                      {isStaff && (
+                        <button
+                          type="button"
+                          className="clinical-action-button"
+                          onClick={() => handleEdit(report)}
+                        >
+                          {t.edit}
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        className="clinical-action-button"
+                        onClick={() => clinicalReportsService.downloadPdf(report.id)}
+                      >
+                        PDF
+                      </button>
+                      <button
+                        type="button"
+                        className="clinical-action-button"
+                        onClick={() => clinicalReportsService.downloadDocx(report.id)}
+                      >
+                        DOCX
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   );
 
   return (
     <div className="clinical-reports-page">
-      <div className="clinical-header" style={{ marginBottom: '1rem' }}>
-        <h2>{isStaff ? t.title : t.reportsList}</h2>
-        <div className="language-toggle" style={{ display: 'flex', gap: '0.5rem' }}>
+      <div className="clinical-page-header no-print">
+        <div className="clinical-language-toggle">
           <button
             type="button"
-            className={language === 'en' ? 'approve-button' : 'action-button'}
+            className={`clinical-language-button${language === 'en' ? ' active' : ''}`}
             onClick={() => setLanguage('en')}
           >
             {t.english}
           </button>
           <button
             type="button"
-            className={language === 'ms' ? 'approve-button' : 'action-button'}
+            className={`clinical-language-button${language === 'ms' ? ' active' : ''}`}
             onClick={() => setLanguage('ms')}
           >
             {t.malay}
@@ -361,53 +578,13 @@ const ClinicalReportsPage = () => {
         </div>
       </div>
 
-      {error && <div className="error-message">{error}</div>}
-      {success && <div className="success-message">{success}</div>}
+      {error && <div className="error-message no-print">{error}</div>}
+      {success && <div className="success-message no-print">{success}</div>}
 
       {isStaff && renderForm()}
+      {renderList()}
 
-      <h3 style={{ marginTop: '1.5rem' }}>
-        {isStaff ? t.myReports : t.reportsList}
-      </h3>
-      {loading ? (
-        <div className="loading-state">Loading...</div>
-      ) : (
-        renderList()
-      )}
-
-      {selectedReport && (
-        <div className="modal-overlay" onClick={() => setSelectedReport(null)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <h3>{labels[selectedReport.language as Language]?.title || t.title}</h3>
-
-            <p><strong>{t.unitLocation}:</strong> {selectedReport.unitLocation}</p>
-            <p><strong>{t.traineeName}:</strong> {selectedReport.traineeName}</p>
-            <p><strong>{t.group}:</strong> {selectedReport.group}</p>
-            <p><strong>{t.monitoringObjective}:</strong> {selectedReport.monitoringObjective}</p>
-            <p><strong>{t.teachingLearningActivities}:</strong> {selectedReport.teachingLearningActivities}</p>
-            <p><strong>{t.clinicalPracticeRecordBook}:</strong> {selectedReport.clinicalPracticeRecordBook}</p>
-            <p><strong>{t.disciplineTraineeWelfareDiscussion}:</strong> {selectedReport.disciplineTraineeWelfareDiscussion}</p>
-            <p><strong>{t.submittedAt}:</strong> {formatDate(selectedReport.createdAt)}</p>
-
-            <div className="modal-actions" style={{ marginTop: '1rem' }}>
-              <button
-                onClick={() => setSelectedReport(null)}
-                className="reject-button"
-                type="button"
-              >
-                {t.close}
-              </button>
-              <button
-                onClick={() => handleDownload(selectedReport.id)}
-                className="approve-button"
-                type="button"
-              >
-                {t.download}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {showPreviewModal && renderPreviewModal()}
     </div>
   );
 };

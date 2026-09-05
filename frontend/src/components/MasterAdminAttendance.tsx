@@ -1,7 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { masterAdminService } from '../services/master-admin.service';
 import { adminService } from '../services/admin.service';
-import { authService } from '../services/auth.service';
 import { openLocation } from '../utils/map';
 import AssignedTaskCell from './AssignedTaskCell';
 import DeletedStaffAttendance from './DeletedStaffAttendance';
@@ -77,35 +76,14 @@ const MasterAdminAttendance = () => {
   const [departments, setDepartments] = useState<Department[]>([]);
   const [staffList, setStaffList] = useState<StaffMember[]>([]);
   const [normalReportMode, setNormalReportMode] = useState(true);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [editingCell, setEditingCell] = useState<{
     id: string;
     field: 'clockIn' | 'clockOut';
     value: string;
   } | null>(null);
 
-  const [showDeleteSection, setShowDeleteSection] = useState(false);
-  const [deleteDepartmentId, setDeleteDepartmentId] = useState('');
-  const [deleteEmployeeId, setDeleteEmployeeId] = useState('');
-  const [deleteStartDate, setDeleteStartDate] = useState('');
-  const [deleteEndDate, setDeleteEndDate] = useState('');
   const [deleteLoading, setDeleteLoading] = useState(false);
-  const [showPreview, setShowPreview] = useState(false);
-  const [previewLoading, setPreviewLoading] = useState(false);
-  const [previewRecords, setPreviewRecords] = useState<
-    {
-      id: string;
-      employeeId: string;
-      employeeName: string;
-      departmentName: string;
-      attendanceDate: string;
-      clockInTime: string | null;
-      clockOutTime: string | null;
-      clockInLocationName: string | null;
-      clockOutLocationName: string | null;
-    }[]
-  >([]);
-  const [previewCount, setPreviewCount] = useState(0);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const canEdit = useMemo(() => {
     try {
@@ -241,10 +219,6 @@ const MasterAdminAttendance = () => {
     return list;
   }, [staffList, departmentId, staffSearch]);
 
-  const deleteFilteredStaff = useMemo(() => {
-    if (!deleteDepartmentId) return staffList;
-    return staffList.filter((s) => s.departmentId === deleteDepartmentId);
-  }, [staffList, deleteDepartmentId]);
 
   const buildDateParams = (): {
     date?: string;
@@ -325,6 +299,7 @@ const MasterAdminAttendance = () => {
       if (response.success && response.data) {
         setAttendance(response.data.records);
         setPagination(response.data);
+        setSelectedIds(new Set());
       }
     } catch (err: any) {
       setError(err.message || 'Failed to load attendance');
@@ -381,113 +356,47 @@ const MasterAdminAttendance = () => {
     }
   };
 
-  const validateDeleteFilters = (): boolean => {
-    if (!deleteEmployeeId && !deleteDepartmentId && !deleteStartDate && !deleteEndDate) {
-      setError('Please select a staff member, department, or date range.');
-      return false;
-    }
-
-    if ((deleteStartDate && !deleteEndDate) || (!deleteStartDate && deleteEndDate)) {
-      setError('Both start and end dates are required for a date range.');
-      return false;
-    }
-
-    if (deleteStartDate && deleteEndDate && deleteEndDate < deleteStartDate) {
-      setError('End date cannot be earlier than start date.');
-      return false;
-    }
-
-    return true;
+  const handleSelectAll = () => {
+    setSelectedIds(new Set(attendance.map((r) => r.id)));
   };
 
-  const getDeleteCompanyId = (): string | null => {
-    const currentUser = authService.getCurrentUser();
-    return currentUser?.companyId || null;
+  const handleDeselectAll = () => {
+    setSelectedIds(new Set());
   };
 
-  const handleViewRecords = async () => {
-    if (!validateDeleteFilters()) return;
-
-    const companyId = getDeleteCompanyId();
-    if (!companyId) {
-      setError('Company context is missing.');
-      return;
+  const toggleSelected = (id: string) => {
+    const next = new Set(selectedIds);
+    if (next.has(id)) {
+      next.delete(id);
+    } else {
+      next.add(id);
     }
-
-    setPreviewLoading(true);
-    setError(null);
-    setSuccessMessage(null);
-    setShowDeleteConfirm(false);
-
-    try {
-      const response = await masterAdminService.previewAttendanceRecords(
-        companyId,
-        {
-          departmentId: deleteDepartmentId || undefined,
-          employeeId: deleteEmployeeId || undefined,
-          startDate: deleteStartDate || undefined,
-          endDate: deleteEndDate || undefined,
-        }
-      );
-
-      if (response.success && response.data) {
-        setPreviewRecords(response.data.records);
-        setPreviewCount(response.data.total);
-        setShowPreview(true);
-      } else {
-        setError(response.message || 'Failed to load attendance preview');
-      }
-    } catch (err: any) {
-      setError(err.message || 'Failed to load attendance preview');
-    } finally {
-      setPreviewLoading(false);
-    }
+    setSelectedIds(next);
   };
 
-  const handleShowDeleteConfirm = () => {
-    setShowDeleteConfirm(true);
-  };
+  const handleDeleteSelected = async () => {
+    if (selectedIds.size === 0) return;
 
-  const handleCancelDelete = () => {
-    setShowDeleteConfirm(false);
-  };
-
-  const handleDeleteAttendanceRecords = async () => {
-    const companyId = getDeleteCompanyId();
-    if (!companyId) {
-      setError('Company context is missing.');
-      return;
-    }
+    const confirmed = window.confirm(
+      `Are you sure you want to permanently delete the selected attendance records?\n\nSelected Records: ${selectedIds.size}\n\nThis action cannot be undone.`
+    );
+    if (!confirmed) return;
 
     setDeleteLoading(true);
     setError(null);
     setSuccessMessage(null);
 
     try {
-      const response = await masterAdminService.deleteAttendanceRecords({
-        companyId,
-        departmentId: deleteDepartmentId || undefined,
-        employeeId: deleteEmployeeId || undefined,
-        startDate: deleteStartDate || undefined,
-        endDate: deleteEndDate || undefined,
-      });
-
+      const response = await adminService.deleteAttendance(Array.from(selectedIds));
       if (response.success) {
-        setSuccessMessage(response.message || 'Attendance records deleted successfully.');
-        setDeleteEmployeeId('');
-        setDeleteDepartmentId('');
-        setDeleteStartDate('');
-        setDeleteEndDate('');
-        setShowDeleteConfirm(false);
-        setShowPreview(false);
-        setPreviewRecords([]);
-        setPreviewCount(0);
+        setSuccessMessage(response.message || 'Selected attendance records deleted successfully');
+        setSelectedIds(new Set());
         await loadAttendance();
       } else {
-        setError(response.message || 'Failed to delete attendance records');
+        setError(response.message || 'Failed to delete selected attendance records');
       }
     } catch (err: any) {
-      setError(err.message || 'Failed to delete attendance records');
+      setError(err.message || 'Failed to delete selected attendance records');
     } finally {
       setDeleteLoading(false);
     }
@@ -743,7 +652,7 @@ const MasterAdminAttendance = () => {
           </div>
         </div>
 
-        <div className="filters-row filters-row-buttons">
+        <div className="filters-row filters-row-buttons attendance-action-group">
           <button
             onClick={handleViewReport}
             disabled={loading}
@@ -785,10 +694,37 @@ const MasterAdminAttendance = () => {
         </div>
       ) : (
         <>
+          <div className="attendance-selection-controls attendance-action-group">
+            <button
+              onClick={handleSelectAll}
+              disabled={loading || deleteLoading}
+              className="export-button"
+            >
+              Select All
+            </button>
+            <button
+              onClick={handleDeselectAll}
+              disabled={loading || deleteLoading}
+              className="export-button"
+            >
+              Deselect All
+            </button>
+            <span className="selected-records-info">
+              Selected Records: {selectedIds.size}
+            </span>
+            <button
+              onClick={handleDeleteSelected}
+              disabled={selectedIds.size === 0 || loading || deleteLoading}
+              className="export-button download-button"
+            >
+              {deleteLoading ? 'Deleting...' : 'Delete Selected Records'}
+            </button>
+          </div>
           <div className="attendance-table-wrapper">
             <table className="attendance-table">
               <thead>
                 <tr>
+                  <th></th>
                   <th>Employee ID</th>
                   <th>Employee Name</th>
                   <th>Department</th>
@@ -808,6 +744,14 @@ const MasterAdminAttendance = () => {
               <tbody>
                 {attendance.map((record, index) => (
                   <tr key={`${record.employeeId}-${record.attendanceDate}-${index}`} className={record.isDeleted ? 'deleted-attendance-row' : ''}>
+                    <td>
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(record.id)}
+                        onChange={() => toggleSelected(record.id)}
+                        disabled={deleteLoading}
+                      />
+                    </td>
                     <td>{record.employeeId}</td>
                     <td>{record.employeeName}</td>
                     <td>{departmentNameMap.get(record.departmentId) || '--'}</td>
@@ -1004,222 +948,6 @@ const MasterAdminAttendance = () => {
         </>
       ))}
 
-      {/* Delete Attendance Records */}
-      <div className="attendance-filters delete-attendance-section">
-        <div className="filters-row filters-row-buttons">
-          <button
-            onClick={() => setShowDeleteSection((prev) => !prev)}
-            disabled={deleteLoading}
-            className="export-button download-button"
-          >
-            {showDeleteSection ? 'Hide Delete Section' : 'Delete Attendance Records'}
-          </button>
-        </div>
-
-        {showDeleteSection && (
-          <div className="delete-attendance-card">
-            <h3 className="delete-attendance-title">Delete Attendance Records</h3>
-            <p className="delete-attendance-hint">
-              Select one or more filters, then view the matching records before deleting.
-            </p>
-
-            <div className="filters-row filters-row-two-col">
-              <div className="filter-group">
-                <label htmlFor="deleteDepartment">Department</label>
-                <select
-                  id="deleteDepartment"
-                  value={deleteDepartmentId}
-                  onChange={(e) => {
-                    setDeleteDepartmentId(e.target.value);
-                    setDeleteEmployeeId('');
-                    setShowPreview(false);
-                    setShowDeleteConfirm(false);
-                  }}
-                  disabled={deleteLoading || previewLoading}
-                >
-                  <option value="">All Departments</option>
-                  {departments.map((dept) => (
-                    <option key={dept.id} value={dept.id}>
-                      {dept.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="filter-group">
-                <label htmlFor="deleteEmployee">Staff</label>
-                <select
-                  id="deleteEmployee"
-                  value={deleteEmployeeId}
-                  onChange={(e) => {
-                    setDeleteEmployeeId(e.target.value);
-                    setShowPreview(false);
-                    setShowDeleteConfirm(false);
-                  }}
-                  disabled={deleteLoading || previewLoading}
-                >
-                  <option value="">Select Staff</option>
-                  {deleteFilteredStaff.map((staff) => (
-                    <option key={staff.employeeId} value={staff.employeeId}>
-                      {staff.employeeId} - {staff.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            <div className="filters-row filters-row-two-col">
-              <div className="filter-group">
-                <label htmlFor="deleteStartDate">From Date</label>
-                <input
-                  type="date"
-                  id="deleteStartDate"
-                  value={deleteStartDate}
-                  onChange={(e) => {
-                    setDeleteStartDate(e.target.value);
-                    setShowPreview(false);
-                    setShowDeleteConfirm(false);
-                  }}
-                  disabled={deleteLoading || previewLoading}
-                />
-              </div>
-
-              <div className="filter-group">
-                <label htmlFor="deleteEndDate">To Date</label>
-                <input
-                  type="date"
-                  id="deleteEndDate"
-                  value={deleteEndDate}
-                  onChange={(e) => {
-                    setDeleteEndDate(e.target.value);
-                    setShowPreview(false);
-                    setShowDeleteConfirm(false);
-                  }}
-                  disabled={deleteLoading || previewLoading}
-                />
-              </div>
-            </div>
-
-            <div className="filters-row filters-row-buttons">
-              <button
-                onClick={handleViewRecords}
-                disabled={deleteLoading || previewLoading}
-                className="export-button"
-              >
-                {previewLoading ? 'Loading...' : 'View Records'}
-              </button>
-            </div>
-
-            {showPreview && (
-              <>
-                <div className="preview-summary">
-                  <h4>Attendance Preview</h4>
-                  <p>
-                    <strong>Total Records Found:</strong> {previewCount}
-                  </p>
-                </div>
-
-                {previewRecords.length > 0 && (
-                  <>
-                    <div className="table-container">
-                      <table className="staff-table">
-                        <thead>
-                          <tr>
-                            <th>Employee ID</th>
-                            <th>Employee Name</th>
-                            <th>Department</th>
-                            <th>Date</th>
-                            <th>Clock In</th>
-                            <th>Clock Out</th>
-                            <th>Location</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {previewRecords.map((record) => (
-                            <tr key={record.id}>
-                              <td>{record.employeeId}</td>
-                              <td>{record.employeeName}</td>
-                              <td>{record.departmentName || '--'}</td>
-                              <td>
-                                {new Date(record.attendanceDate).toLocaleDateString('en-GB')}
-                              </td>
-                              <td>{record.clockInTime ? formatTimeOnly(record.clockInTime) : '--'}</td>
-                              <td>{record.clockOutTime ? formatTimeOnly(record.clockOutTime) : '--'}</td>
-                              <td>
-                                {record.clockInLocationName ||
-                                  record.clockOutLocationName ||
-                                  '--'}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-
-                    <div className="filters-row filters-row-buttons">
-                      <button
-                        onClick={handleShowDeleteConfirm}
-                        disabled={deleteLoading}
-                        className="export-button download-button"
-                      >
-                        Delete Selected Attendance Records
-                      </button>
-                    </div>
-                  </>
-                )}
-
-                {showDeleteConfirm && (
-                  <div className="delete-confirm-modal">
-                    <h3>Confirm Delete</h3>
-                    <p>
-                      Are you sure you want to permanently delete these attendance records?
-                    </p>
-
-                    <div className="confirm-details">
-                      <p>
-                        <strong>Department:</strong>{' '}
-                        {departments.find((d) => d.id === deleteDepartmentId)?.name || 'All'}
-                      </p>
-                      <p>
-                        <strong>Staff:</strong>{' '}
-                        {staffList.find((s) => s.employeeId === deleteEmployeeId)?.name || 'All'}
-                      </p>
-                      <p>
-                        <strong>Date Range:</strong>{' '}
-                        {deleteStartDate && deleteEndDate
-                          ? `${new Date(deleteStartDate).toLocaleDateString(
-                              'en-GB'
-                            )} to ${new Date(deleteEndDate).toLocaleDateString('en-GB')}`
-                          : 'All dates'}
-                      </p>
-                      <p>
-                        <strong>Records:</strong> {previewCount}
-                      </p>
-                    </div>
-
-                    <div className="action-buttons">
-                      <button
-                        onClick={handleDeleteAttendanceRecords}
-                        disabled={deleteLoading}
-                        className="reject-button"
-                      >
-                        {deleteLoading ? 'Deleting...' : 'Confirm Delete'}
-                      </button>
-                      <button
-                        onClick={handleCancelDelete}
-                        disabled={deleteLoading}
-                        className="approve-button"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-        )}
-      </div>
     </div>
   );
 };

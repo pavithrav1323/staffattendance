@@ -3,8 +3,7 @@ import { z } from "zod";
 export const clinicalReportLanguageEnum = z.enum(["en", "ms"]);
 export type ClinicalReportLanguage = z.infer<typeof clinicalReportLanguageEnum>;
 
-export const createClinicalReportSchema = z.object({
-  unitLocation: z.string().trim().min(1, "Unit / Location is required").max(200),
+export const reportTraineeSchema = z.object({
   traineeName: z.string().trim().min(1, "Trainee name is required").max(150),
   group: z.string().trim().min(1, "Group is required").max(100),
   monitoringObjective: z
@@ -27,7 +26,18 @@ export const createClinicalReportSchema = z.object({
     .trim()
     .min(1, "Discipline / trainee welfare / discussion is required")
     .max(4000),
-  language: clinicalReportLanguageEnum.default("en"),
 });
+
+export type ReportTrainee = z.infer<typeof reportTraineeSchema>;
+
+export const createClinicalReportSchema = z.object({
+  unitLocation: z.string().trim().min(1, "Unit / Location is required").max(200),
+  monitoringDateTime: z.string().trim().min(1, "Date & Time of Monitoring is required"),
+  language: clinicalReportLanguageEnum.default("en"),
+  trainees: z.array(reportTraineeSchema).min(1, "At least one trainee is required"),
+});
+
+export const updateClinicalReportSchema = createClinicalReportSchema;
+export type UpdateClinicalReportInput = z.infer<typeof updateClinicalReportSchema>;
 
 export type CreateClinicalReportInput = z.infer<typeof createClinicalReportSchema>;

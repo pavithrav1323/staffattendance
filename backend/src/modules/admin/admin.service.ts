@@ -1393,3 +1393,67 @@ export async function deleteDeletedStaffAttendance(
 
   return { success: true };
 }
+
+export async function deleteAdminAttendanceRecords(
+  authUser: AuthUser,
+  attendanceIds: string[]
+) {
+  if (!authUser.companyId) {
+    throw new AppError(403, "Company context is required");
+  }
+
+  if (authUser.role !== "ADMIN" && authUser.role !== "MASTER_ADMIN") {
+    throw new AppError(403, "Access denied");
+  }
+
+  if (!attendanceIds || attendanceIds.length === 0) {
+    throw new AppError(400, "At least one attendance record must be selected");
+  }
+
+  const scopeConditions: any[] = [
+    eq(attendance.companyId, authUser.companyId),
+  ];
+
+  if (authUser.role === "ADMIN") {
+    if (!authUser.departmentId) {
+      throw new AppError(403, "Department context is required");
+    }
+    scopeConditions.push(
+      eq(attendance.departmentId, authUser.departmentId)
+    );
+  }
+
+  const matching = await db
+    .select({ id: attendance.id })
+    .from(attendance)
+    .where(
+      and(
+        ...scopeConditions,
+        inArray(attendance.id, attendanceIds)
+      )
+    );
+
+  if (matching.length !== attendanceIds.length) {
+    throw new AppError(
+      403,
+      "One or more selected records are not within your authorized scope"
+    );
+  }
+
+  await db.transaction(async (tx) => {
+    await tx
+      .delete(attendance)
+      .where(
+        and(
+          ...scopeConditions,
+          inArray(attendance.id, attendanceIds)
+        )
+      );
+  });
+
+  return {
+    success: true,
+    count: attendanceIds.length,
+    message: `${attendanceIds.length} attendance record(s) deleted successfully`,
+  };
+}

@@ -67,6 +67,8 @@ const MasterAdminStaffPage = () => {
   const [editName, setEditName] = useState('');
   const [editPhone, setEditPhone] = useState('');
   const [editDesignation, setEditDesignation] = useState('');
+  const [editEmployeeId, setEditEmployeeId] = useState('');
+  const [editError, setEditError] = useState<string | null>(null);
   const [editLoading, setEditLoading] = useState(false);
 
   const loadPendingStaff = async () => {
@@ -448,16 +450,20 @@ const MasterAdminStaffPage = () => {
 
   const handleOpenEditStaff = (staff: ApprovedStaff) => {
     setEditingStaff(staff);
+    setEditEmployeeId(staff.employeeId);
     setEditName(staff.name);
     setEditPhone(staff.phone || '');
     setEditDesignation(staff.designation || '');
+    setEditError(null);
   };
 
   const closeEditModal = () => {
     setEditingStaff(null);
+    setEditEmployeeId('');
     setEditName('');
     setEditPhone('');
     setEditDesignation('');
+    setEditError(null);
     setEditLoading(false);
   };
 
@@ -466,11 +472,13 @@ const MasterAdminStaffPage = () => {
     if (!editingStaff) return;
 
     setEditLoading(true);
+    setEditError(null);
     setError(null);
     setSuccess(null);
 
     try {
       const response = await masterAdminService.updateStaff(editingStaff.id, {
+        employeeId: editEmployeeId.trim(),
         name: editName.trim(),
         phone: editPhone.trim(),
         designation: editDesignation.trim(),
@@ -481,10 +489,20 @@ const MasterAdminStaffPage = () => {
         closeEditModal();
         await loadApprovedStaff();
       } else {
-        setError(response.message || 'Failed to update staff');
+        const message = response.message || 'Failed to update staff';
+        setEditError(
+          message.toLowerCase().includes('employee id already exists')
+            ? 'Employee ID already exists for this company.'
+            : message
+        );
       }
     } catch (err: any) {
-      setError(err.message || 'Failed to update staff');
+      const message = err.message || 'Failed to update staff';
+      setEditError(
+        message.toLowerCase().includes('employee id already exists')
+          ? 'Employee ID already exists for this company.'
+          : message
+      );
     } finally {
       setEditLoading(false);
     }
@@ -498,7 +516,7 @@ const MasterAdminStaffPage = () => {
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search by ILKKM ID, name, or email"
+            placeholder="Search by Employee ID, name, or email"
             className="staff-search-input"
           />
 
@@ -531,9 +549,9 @@ const MasterAdminStaffPage = () => {
                     <table className="staff-table">
                       <thead>
                         <tr>
-                          <th>ILKKM ID</th>
-                          <th>ILKKM Name</th>
-                          <th>ILKKM Email</th>
+                          <th>Employee ID</th>
+                          <th>Name</th>
+                          <th>Email</th>
                           <th>Phone</th>
                           <th>Department</th>
                           <th>Designation</th>
@@ -594,7 +612,7 @@ const MasterAdminStaffPage = () => {
               type="text"
               value={approvedSearch}
               onChange={(e) => setApprovedSearch(e.target.value)}
-              placeholder="Search by ILKKM ID, name, email, or department"
+              placeholder="Search by Employee ID, name, email, or department"
               className="staff-search-input"
             />
 
@@ -706,9 +724,9 @@ const MasterAdminStaffPage = () => {
                     <thead>
                       <tr>
                         {deleteModeActive && <th></th>}
-                        <th>ILKKM ID</th>
-                        <th>ILKKM Name</th>
-                        <th>ILKKM Email</th>
+                        <th>Employee ID</th>
+                        <th>Name</th>
+                        <th>Email</th>
                         <th>Phone</th>
                         <th>Department</th>
                         <th>Designation</th>
@@ -885,11 +903,31 @@ const MasterAdminStaffPage = () => {
               <h3>Edit Staff</h3>
               <p className="modal-subtitle">
                 Staff: <strong>{editingStaff.name}</strong>
-                <br />
-                Employee ID: <strong>{editingStaff.employeeId}</strong>
               </p>
 
               <form onSubmit={handleEditStaff}>
+                <div className="form-group">
+                  <label htmlFor="editEmployeeId">Employee ID</label>
+                  <input
+                    id="editEmployeeId"
+                    type="text"
+                    value={editEmployeeId}
+                    onChange={(e) => {
+                      setEditEmployeeId(e.target.value);
+                      setEditError(null);
+                    }}
+                    placeholder="Enter employee ID"
+                    className="staff-search-input"
+                    required
+                  />
+                </div>
+
+                {editError && (
+                  <div className="error-message" role="alert">
+                    {editError}
+                  </div>
+                )}
+
                 <div className="form-group">
                   <label htmlFor="editName">Name</label>
                   <input

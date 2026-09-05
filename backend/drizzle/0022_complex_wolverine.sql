@@ -1,0 +1,2 @@
+ALTER TABLE "clinical_reports" ADD COLUMN "monitoring_date_time" timestamp with time zone DEFAULT now() NOT NULL;--> statement-breakpoint
+ALTER TABLE "clinical_reports" ADD COLUMN "trainees" jsonb DEFAULT '[]'::jsonb NOT NULL;

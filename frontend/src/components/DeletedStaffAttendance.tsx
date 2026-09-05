@@ -124,15 +124,13 @@ const DeletedStaffAttendance = ({ service, onError, onSuccess, onModeChange }: D
 
   return (
     <>
-      <div className="filters-row filters-row-buttons">
-        <button
-          onClick={handleViewDeletedStaffRecords}
-          disabled={loadingDeletedStaff}
-          className="export-button delete-deleted-records-button"
-        >
-          {loadingDeletedStaff ? 'Loading...' : deletedStaffMode ? 'Back to Normal Report' : 'View Deleted Staff Records'}
-        </button>
-      </div>
+      <button
+        onClick={handleViewDeletedStaffRecords}
+        disabled={loadingDeletedStaff}
+        className="export-button delete-deleted-records-button"
+      >
+        {loadingDeletedStaff ? 'Loading...' : deletedStaffMode ? 'Back to Normal Report' : 'View Deleted Staff Records'}
+      </button>
 
       {deletedStaffMode && (
         <div className="filters-row filters-row-two-col deleted-staff-management">

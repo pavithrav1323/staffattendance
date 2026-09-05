@@ -58,6 +58,7 @@ interface ApproveRejectResponse {
 }
 
 interface AttendanceRecord {
+  id: string;
   employeeId: string;
   employeeName: string;
   attendanceDate: string;
@@ -236,6 +237,10 @@ export const adminService = {
     }
 
     return response.blob();
+  },
+
+  deleteAttendance: async (attendanceIds: string[]): Promise<{ success: boolean; count?: number; message?: string }> => {
+    return apiRequest('/admin/attendance/records', 'DELETE', { attendanceIds });
   },
 
   deleteDeletedStaffAttendance: async (employeeId: string): Promise<ApproveRejectResponse> => {

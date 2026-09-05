@@ -47,13 +47,16 @@ const AdminAttendance = ({ staffList }: AdminAttendanceProps) => {
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [activeSessionOnly, setActiveSessionOnly] = useState(false);
   const attendanceTableRef = useRef<HTMLDivElement>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const displayedAttendance = activeSessionOnly
+    ? attendance.filter((record) => record.sessionStatus === 'CLOCKED_IN')
+    : attendance;
 
   // Deleted staff management state
-  const [deletedStaffMode, setDeletedStaffMode] = useState(false);
+  const [deletedStaffMode] = useState(false);
   const [deletedStaffList, setDeletedStaffList] = useState<Array<{ id: string; employeeId: string; name: string }>>([]);
   const [selectedDeletedStaffId, setSelectedDeletedStaffId] = useState('');
   const [deletedStaffRecords, setDeletedStaffRecords] = useState<AttendanceRecord[]>([]);
-  const [loadingDeletedStaff, setLoadingDeletedStaff] = useState(false);
   const [loadingDeletedRecords, setLoadingDeletedRecords] = useState(false);
 
   const buildDateParams = (): {
@@ -134,6 +137,7 @@ const AdminAttendance = ({ staffList }: AdminAttendanceProps) => {
       if (response.success && response.data) {
         setAttendance(response.data.records);
         setPagination(response.data);
+        setSelectedIds(new Set());
       }
     } catch (err: any) {
       setError(err.message || 'Failed to load attendance');
@@ -260,35 +264,6 @@ const AdminAttendance = ({ staffList }: AdminAttendanceProps) => {
     }
   };
 
-  const handleViewDeletedStaffRecords = async () => {
-    if (deletedStaffMode) {
-      // Toggle off — return to normal report
-      setDeletedStaffMode(false);
-      setSelectedDeletedStaffId('');
-      setDeletedStaffRecords([]);
-      return;
-    }
-
-    setError(null);
-    setSuccessMessage(null);
-    setLoadingDeletedStaff(true);
-
-    try {
-      const response = await adminService.getDeletedStaff();
-      if (response.success && response.data) {
-        setDeletedStaffList(response.data);
-        setDeletedStaffMode(true);
-        if (response.data.length === 0) {
-          setSuccessMessage('No deleted staff members found.');
-        }
-      }
-    } catch (err: any) {
-      setError(err.message || 'Failed to load deleted staff list');
-    } finally {
-      setLoadingDeletedStaff(false);
-    }
-  };
-
   const handleSelectDeletedStaff = async (employeeId: string) => {
     setSelectedDeletedStaffId(employeeId);
     setDeletedStaffRecords([]);
@@ -347,6 +322,52 @@ const AdminAttendance = ({ staffList }: AdminAttendanceProps) => {
       }
     } catch (err: any) {
       setError(err.message || 'Failed to delete staff records');
+    } finally {
+      setDeletingRecords(false);
+    }
+  };
+
+  const handleSelectAll = () => {
+    setSelectedIds(new Set(attendance.map((r) => r.id)));
+  };
+
+  const handleDeselectAll = () => {
+    setSelectedIds(new Set());
+  };
+
+  const toggleSelected = (id: string) => {
+    const next = new Set(selectedIds);
+    if (next.has(id)) {
+      next.delete(id);
+    } else {
+      next.add(id);
+    }
+    setSelectedIds(next);
+  };
+
+  const handleDeleteSelected = async () => {
+    if (selectedIds.size === 0) return;
+
+    const confirmed = window.confirm(
+      `Are you sure you want to permanently delete the selected attendance records?\n\nSelected Records: ${selectedIds.size}\n\nThis action cannot be undone.`
+    );
+    if (!confirmed) return;
+
+    setDeletingRecords(true);
+    setError(null);
+    setSuccessMessage(null);
+
+    try {
+      const response = await adminService.deleteAttendance(Array.from(selectedIds));
+      if (response.success) {
+        setSuccessMessage(response.message || 'Selected attendance records deleted successfully');
+        setSelectedIds(new Set());
+        await loadAttendance();
+      } else {
+        setError(response.message || 'Failed to delete selected attendance records');
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to delete selected attendance records');
     } finally {
       setDeletingRecords(false);
     }
@@ -597,7 +618,7 @@ const AdminAttendance = ({ staffList }: AdminAttendanceProps) => {
           </div>
         </div>
 
-        <div className="filters-row filters-row-buttons">
+        <div className="filters-row filters-row-buttons attendance-action-group">
           <button
             onClick={handleViewReport}
             disabled={loading}
@@ -612,14 +633,6 @@ const AdminAttendance = ({ staffList }: AdminAttendanceProps) => {
             className="export-button"
           >
             {exporting ? 'Preparing Download...' : 'Download Report'}
-          </button>
-
-          <button
-            onClick={handleViewDeletedStaffRecords}
-            disabled={loadingDeletedStaff || loading}
-            className="export-button delete-deleted-records-button"
-          >
-            {loadingDeletedStaff ? 'Loading...' : deletedStaffMode ? 'Back to Normal Report' : 'View Deleted Staff Records'}
           </button>
         </div>
 
@@ -742,22 +755,45 @@ const AdminAttendance = ({ staffList }: AdminAttendanceProps) => {
               </div>
             )}
 
-            {(() => {
-              const displayedAttendance = activeSessionOnly
-                ? attendance.filter((record) => record.sessionStatus === 'CLOCKED_IN')
-                : attendance;
-
-              return displayedAttendance.length === 0 ? (
-                <div className="empty-state">
-                  {activeSessionOnly
-                    ? 'No active Staff sessions found.'
-                    : 'No attendance records found for the selected period.'}
+            {displayedAttendance.length === 0 ? (
+              <div className="empty-state">
+                {activeSessionOnly
+                  ? 'No active Staff sessions found.'
+                  : 'No attendance records found for the selected period.'}
+              </div>
+            ) : (
+              <>
+                <div className="attendance-selection-controls attendance-action-group">
+                  <button
+                    onClick={handleSelectAll}
+                    disabled={loading || deletingRecords}
+                    className="export-button"
+                  >
+                    Select All
+                  </button>
+                  <button
+                    onClick={handleDeselectAll}
+                    disabled={loading || deletingRecords}
+                    className="export-button"
+                  >
+                    Deselect All
+                  </button>
+                  <span className="selected-records-info">
+                    Selected Records: {selectedIds.size}
+                  </span>
+                  <button
+                    onClick={handleDeleteSelected}
+                    disabled={selectedIds.size === 0 || loading || deletingRecords}
+                    className="export-button delete-deleted-records-button"
+                  >
+                    {deletingRecords ? 'Deleting...' : 'Delete Selected Records'}
+                  </button>
                 </div>
-              ) : (
                 <div className="attendance-table-wrapper">
                   <table className="attendance-table">
                     <thead>
                       <tr>
+                        <th></th>
                         <th>Employee ID</th>
                         <th>Employee Name</th>
                         <th>Date</th>
@@ -776,6 +812,14 @@ const AdminAttendance = ({ staffList }: AdminAttendanceProps) => {
                     <tbody>
                       {displayedAttendance.map((record, index) => (
                         <tr key={`${record.employeeId}-${record.attendanceDate}-${index}`} className={record.isDeleted ? 'deleted-attendance-row' : ''}>
+                          <td>
+                            <input
+                              type="checkbox"
+                              checked={selectedIds.has(record.id)}
+                              onChange={() => toggleSelected(record.id)}
+                              disabled={deletingRecords}
+                            />
+                          </td>
                           <td>{record.employeeId}</td>
                           <td>{record.employeeName}</td>
                           <td>{record.attendanceDate}</td>
@@ -859,8 +903,8 @@ const AdminAttendance = ({ staffList }: AdminAttendanceProps) => {
                     </tbody>
                   </table>
                 </div>
-              );
-            })()}
+              </>
+            )}
           </div>
 
           {/* Pagination */}
