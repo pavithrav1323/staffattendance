@@ -91,6 +91,7 @@ interface DeletedStaffAttendanceResponse {
 interface AttendanceResponse {
   success: boolean;
   data?: {
+    timezone: string;
     period: string;
     page: number;
     limit: number;
@@ -324,7 +325,7 @@ export const masterAdminService = {
 
   updateAttendanceTime: async (
     attendanceId: string,
-    data: { clockIn?: string; clockOut?: string; timezone?: string }
+    data: { clockIn?: string; clockOut?: string }
   ): Promise<CreateResponse> => {
     return apiRequest(`/master-admin/attendance/${attendanceId}/time`, 'PUT', data);
   },

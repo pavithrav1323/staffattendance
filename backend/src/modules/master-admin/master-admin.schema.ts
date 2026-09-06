@@ -37,7 +37,6 @@ export const updateAttendanceTimeSchema = z.object({
     .or(z.literal(""))
     .or(z.null())
     .optional(),
-  timezone: z.string().optional(),
 });
 
 export type UpdateAttendanceTimeInput =

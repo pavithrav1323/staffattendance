@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { masterAdminService } from '../services/master-admin.service';
 import { adminService } from '../services/admin.service';
+import { authService } from '../services/auth.service';
 import { openLocation } from '../utils/map';
 import AssignedTaskCell from './AssignedTaskCell';
 import DeletedStaffAttendance from './DeletedStaffAttendance';
@@ -68,6 +69,7 @@ const MasterAdminAttendance = () => {
     total: 0,
     totalPages: 0,
   });
+  const [attendanceTimezone, setAttendanceTimezone] = useState('UTC');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -85,14 +87,7 @@ const MasterAdminAttendance = () => {
 
   const [deleteLoading, setDeleteLoading] = useState(false);
 
-  const canEdit = useMemo(() => {
-    try {
-      const user = JSON.parse(localStorage.getItem('user') || '{}');
-      return user?.role === 'MASTER_ADMIN';
-    } catch {
-      return false;
-    }
-  }, []);
+  const canEdit = authService.getCurrentUser()?.role === 'MASTER_ADMIN';
 
   // Load departments and staff list on mount
   useEffect(() => {
@@ -135,12 +130,46 @@ const MasterAdminAttendance = () => {
     return map;
   }, [departments]);
 
-  const toTimeInput = (dateString: string | null): string => {
+  const formatAttendanceTime = (dateString: string | null): string => {
     if (!dateString) return '';
-    const date = new Date(dateString);
-    const hours = String(date.getHours()).padStart(2, '0');
-    const minutes = String(date.getMinutes()).padStart(2, '0');
-    return `${hours}:${minutes}`;
+    return new Intl.DateTimeFormat('en-US', {
+      timeZone: attendanceTimezone,
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+    }).format(new Date(dateString));
+  };
+
+  const toTimeInput = (dateString: string | null): string => {
+    const formatted = formatAttendanceTime(dateString);
+    return formatted ? formatted.replace(/\u202f/g, ' ') : '';
+  };
+
+  const timeToApiValue = (value: string): string => {
+    const match = value.trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+    if (!match) throw new Error('Please enter a valid time with AM or PM.');
+    let hour = Number(match[1]);
+    const minute = Number(match[2]);
+    const period = match[3].toUpperCase();
+    if (hour < 1 || hour > 12 || minute > 59) {
+      throw new Error('Please enter a valid time with AM or PM.');
+    }
+    if (period === 'AM' && hour === 12) hour = 0;
+    if (period === 'PM' && hour !== 12) hour += 12;
+    return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+  };
+
+  const updateEditingTimePart = (part: 'hour' | 'minute' | 'period', value: string) => {
+    if (!editingCell) return;
+    const match = editingCell.value.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+    const current = match ?? ['','12','00','AM'];
+    const next = {
+      hour: current[1],
+      minute: current[2],
+      period: current[3].toUpperCase(),
+    };
+    next[part] = value;
+    setEditingCell({ ...editingCell, value: `${next.hour}:${next.minute} ${next.period}` });
   };
 
   const handleTimeDoubleClick = (
@@ -167,23 +196,16 @@ const MasterAdminAttendance = () => {
   ) => {
     if (!editingCell) return;
 
-    const clockIn =
-      field === 'clockIn'
-        ? editingCell.value
-        : toTimeInput(record.clockInTime);
-    const clockOut =
-      field === 'clockOut'
-        ? editingCell.value
-        : toTimeInput(record.clockOutTime);
-
     try {
+      const clockIn = field === 'clockIn'
+        ? timeToApiValue(editingCell.value)
+        : (record.clockInTime ? timeToApiValue(toTimeInput(record.clockInTime)) : undefined);
+      const clockOut = field === 'clockOut'
+        ? timeToApiValue(editingCell.value)
+        : (record.clockOutTime ? timeToApiValue(toTimeInput(record.clockOutTime)) : undefined);
       const response = await masterAdminService.updateAttendanceTime(
         record.id,
-        {
-          clockIn,
-          clockOut,
-          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-        }
+        { clockIn, clockOut }
       );
 
       if (response.success) {
@@ -298,6 +320,7 @@ const MasterAdminAttendance = () => {
 
       if (response.success && response.data) {
         setAttendance(response.data.records);
+        setAttendanceTimezone(response.data.timezone);
         setPagination(response.data);
         setSelectedIds(new Set());
       }
@@ -400,16 +423,6 @@ const MasterAdminAttendance = () => {
     } finally {
       setDeleteLoading(false);
     }
-  };
-
-  const formatTimeOnly = (dateString: string | null): string => {
-    if (!dateString) return '--';
-    const date = new Date(dateString);
-    return date.toLocaleTimeString('en-US', {
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: true
-    });
   };
 
   const formatWorkingTime = (minutes: number | null): string => {
@@ -768,29 +781,44 @@ const MasterAdminAttendance = () => {
                       {editingCell?.id === record.id &&
                       editingCell?.field === 'clockIn' ? (
                         <div className="time-edit-controls">
-                          <input
-                            type="time"
-                            value={editingCell.value}
-                            onChange={(e) =>
-                              setEditingCell({
-                                ...editingCell,
-                                value: e.target.value,
-                              })
-                            }
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter')
-                                handleTimeSave(record, 'clockIn');
-                              if (e.key === 'Escape') handleTimeCancel();
-                            }}
-                            autoFocus
-                          />
+                          <select
+                            value={editingCell.value.split(':')[0]}
+                            onChange={(e) => updateEditingTimePart('hour', e.target.value)}
+                            aria-label="Clock in hour"
+                          >
+                            {Array.from({ length: 12 }, (_, index) => {
+                              const hour = String(index + 1).padStart(2, '0');
+                              return <option key={hour} value={hour}>{hour}</option>;
+                            })}
+                          </select>
+                          <span>:</span>
+                          <select
+                            value={editingCell.value.split(':')[1].split(' ')[0]}
+                            onChange={(e) => updateEditingTimePart('minute', e.target.value)}
+                            aria-label="Clock in minute"
+                          >
+                            {Array.from({ length: 60 }, (_, index) => {
+                              const minute = String(index).padStart(2, '0');
+                              return <option key={minute} value={minute}>{minute}</option>;
+                            })}
+                          </select>
+                          <select
+                            value={editingCell.value.split(' ')[1]}
+                            onChange={(e) => updateEditingTimePart('period', e.target.value)}
+                            aria-label="Clock in AM or PM"
+                          >
+                            <option value="AM">AM</option>
+                            <option value="PM">PM</option>
+                          </select>
                           <button
+                            type="button"
                             className="time-save-btn"
                             onClick={() => handleTimeSave(record, 'clockIn')}
                           >
                             Save
                           </button>
                           <button
+                            type="button"
                             className="time-cancel-btn"
                             onClick={handleTimeCancel}
                           >
@@ -798,7 +826,7 @@ const MasterAdminAttendance = () => {
                           </button>
                         </div>
                       ) : (
-                        formatTimeOnly(record.clockInTime)
+                        formatAttendanceTime(record.clockInTime)
                       )}
                     </td>
                     <td className="assigned-task-cell">
@@ -840,29 +868,44 @@ const MasterAdminAttendance = () => {
                       {editingCell?.id === record.id &&
                       editingCell?.field === 'clockOut' ? (
                         <div className="time-edit-controls">
-                          <input
-                            type="time"
-                            value={editingCell.value}
-                            onChange={(e) =>
-                              setEditingCell({
-                                ...editingCell,
-                                value: e.target.value,
-                              })
-                            }
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter')
-                                handleTimeSave(record, 'clockOut');
-                              if (e.key === 'Escape') handleTimeCancel();
-                            }}
-                            autoFocus
-                          />
+                          <select
+                            value={editingCell.value.split(':')[0]}
+                            onChange={(e) => updateEditingTimePart('hour', e.target.value)}
+                            aria-label="Clock out hour"
+                          >
+                            {Array.from({ length: 12 }, (_, index) => {
+                              const hour = String(index + 1).padStart(2, '0');
+                              return <option key={hour} value={hour}>{hour}</option>;
+                            })}
+                          </select>
+                          <span>:</span>
+                          <select
+                            value={editingCell.value.split(':')[1].split(' ')[0]}
+                            onChange={(e) => updateEditingTimePart('minute', e.target.value)}
+                            aria-label="Clock out minute"
+                          >
+                            {Array.from({ length: 60 }, (_, index) => {
+                              const minute = String(index).padStart(2, '0');
+                              return <option key={minute} value={minute}>{minute}</option>;
+                            })}
+                          </select>
+                          <select
+                            value={editingCell.value.split(' ')[1]}
+                            onChange={(e) => updateEditingTimePart('period', e.target.value)}
+                            aria-label="Clock out AM or PM"
+                          >
+                            <option value="AM">AM</option>
+                            <option value="PM">PM</option>
+                          </select>
                           <button
+                            type="button"
                             className="time-save-btn"
                             onClick={() => handleTimeSave(record, 'clockOut')}
                           >
                             Save
                           </button>
                           <button
+                            type="button"
                             className="time-cancel-btn"
                             onClick={handleTimeCancel}
                           >
@@ -870,7 +913,7 @@ const MasterAdminAttendance = () => {
                           </button>
                         </div>
                       ) : (
-                        formatTimeOnly(record.clockOutTime)
+                        formatAttendanceTime(record.clockOutTime)
                       )}
                     </td>
                     <td>

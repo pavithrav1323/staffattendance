@@ -9,6 +9,7 @@ import { requireCompanyContext } from "../middleware/tenant.middleware.js";
 import { validateBody } from "../middleware/validate.middleware.js";
 import {
   createClinicalReport,
+  deleteClinicalReports,
   generateDocxForReport,
   generatePdfForReport,
   getClinicalReportById,
@@ -17,6 +18,7 @@ import {
 } from "../modules/clinical-reports/clinical-reports.service.js";
 import {
   createClinicalReportSchema,
+  deleteClinicalReportsSchema,
   updateClinicalReportSchema,
 } from "../modules/clinical-reports/clinical-reports.schema.js";
 
@@ -127,6 +129,32 @@ router.put(
         success: true,
         message: "Clinical report updated successfully",
         data: report,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * DELETE /api/clinical-reports
+ */
+router.delete(
+  "/bulk",
+  ...authenticatedAccess,
+  allowRoles("STAFF", "ADMIN", "MASTER_ADMIN"),
+  validateBody(deleteClinicalReportsSchema),
+  async (
+    req: AuthRequest,
+    res: Response,
+    next: NextFunction
+  ) => {
+    try {
+      const result = await deleteClinicalReports(req.user!, req.body.reportIds);
+      res.status(200).json({
+        success: true,
+        message: "Clinical Report deleted successfully.",
+        data: result,
       });
     } catch (error) {
       next(error);

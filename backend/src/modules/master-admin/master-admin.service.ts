@@ -479,6 +479,16 @@ export async function getMasterAdminAttendance(
     throw new AppError(403, "Company context is required");
   }
 
+  const [attendanceCompany] = await db
+    .select({ timezone: companies.timezone })
+    .from(companies)
+    .where(eq(companies.id, authUser.companyId))
+    .limit(1);
+
+  if (!attendanceCompany?.timezone) {
+    throw new AppError(500, "Company timezone not configured");
+  }
+
   // Pagination validation
   const currentPage = page ?? 1;
   const currentLimit = limit ?? 20;
@@ -630,6 +640,7 @@ export async function getMasterAdminAttendance(
     .offset(offset);
 
   return {
+    timezone: attendanceCompany.timezone,
     period: reportLabel,
     page: currentPage,
     limit: currentLimit,
@@ -971,9 +982,13 @@ export async function updateMasterAdminAttendanceTime(
   input: {
     clockIn?: string;
     clockOut?: string | null;
-    timezone?: string;
+    timezone?: string | null;
   }
 ) {
+  if (authUser.role !== "MASTER_ADMIN") {
+    throw new AppError(403, "Only MASTER_ADMIN can update attendance times");
+  }
+
   if (!authUser.companyId) {
     throw new AppError(403, "Company context is required");
   }
@@ -1006,7 +1021,7 @@ export async function updateMasterAdminAttendanceTime(
     .where(eq(companies.id, authUser.companyId))
     .limit(1);
 
-  const timeZone = input.timezone || company?.timezone;
+  const timeZone = company?.timezone;
   if (!timeZone) {
     throw new AppError(500, "Timezone not configured for this company");
   }
@@ -1056,8 +1071,6 @@ export async function updateMasterAdminAttendanceTime(
     );
   }
 
-  const sessionStatus = clockOutDate ? "CLOCKED_OUT" : "CLOCKED_IN";
-
   const updateData: any = {
     updatedAt: new Date(),
   };
@@ -1066,7 +1079,7 @@ export async function updateMasterAdminAttendanceTime(
   if (input.clockOut !== undefined) updateData.clockOutTime = clockOutDate;
   if (input.clockIn !== undefined || input.clockOut !== undefined) {
     updateData.workingMinutes = workingMinutes;
-    updateData.sessionStatus = sessionStatus;
+    updateData.sessionStatus = record.sessionStatus;
   }
 
   await db

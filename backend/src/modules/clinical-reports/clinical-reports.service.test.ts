@@ -3,6 +3,7 @@ import type { AuthRequest } from "../../middleware/auth.middleware.js";
 import { db } from "../../db/connection.js";
 import {
   createClinicalReport,
+  deleteClinicalReports,
   getClinicalReports,
   getClinicalReportById,
   generatePdfForReport,
@@ -124,7 +125,7 @@ function mockTransaction(
 
         const rn =
           fixedReportNumber ??
-          `1/${String(currentSequence).padStart(7, "0")}/26`;
+          `7/${String(currentSequence).padStart(7, "0")}/26`;
         return createInsertChainable([
           {
             id: reportId ?? `report-${currentSequence}`,
@@ -141,6 +142,7 @@ function mockTransaction(
 describe("createClinicalReport", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    (db as any).select = vi.fn(() => createChainable([{ companyCode: "BPL-ILKKM007" }]));
   });
 
   it("submits a report for STAFF with auth companyId and submittedBy", async () => {
@@ -150,7 +152,7 @@ describe("createClinicalReport", () => {
 
     expect(result).toEqual({
       id: "report-1",
-      reportNumber: "1/0000001/26",
+      reportNumber: "7/0000001/26",
     });
     expect(db.transaction).toHaveBeenCalledTimes(1);
   });
@@ -160,16 +162,17 @@ describe("createClinicalReport", () => {
 
     const result = await createClinicalReport(staffUser, validInput);
 
-    expect(result.reportNumber).toBe("1/0000002/26");
+    expect(result.reportNumber).toBe("7/0000002/26");
   });
 
   it("uses a new sequence for a different company", async () => {
     const company7User = { ...staffUser, companyId: "company-7" };
-    mockTransaction(0, "report-7", "7/0000001/26");
+    (db as any).select = vi.fn(() => createChainable([{ companyCode: "BPL-ILKKM004" }]));
+    mockTransaction(0, "report-7", "4/0000001/26");
 
     const result = await createClinicalReport(company7User, validInput);
 
-    expect(result.reportNumber).toBe("7/0000001/26");
+    expect(result.reportNumber).toBe("4/0000001/26");
   });
 
   it("uses one report number for a submission with multiple trainees", async () => {
@@ -181,7 +184,7 @@ describe("createClinicalReport", () => {
 
     const result = await createClinicalReport(staffUser, multiInput);
 
-    expect(result.reportNumber).toBe("1/0000005/26");
+    expect(result.reportNumber).toBe("7/0000005/26");
     const insertCalls = (db.transaction as unknown as ReturnType<typeof vi.fn>).mock.calls;
     expect(insertCalls.length).toBeGreaterThan(0);
   });
@@ -197,9 +200,9 @@ describe("createClinicalReport", () => {
 
     const numbers = results.map((r) => r.reportNumber);
     expect(new Set(numbers).size).toBe(numbers.length);
-    expect(numbers).toContain("1/0000001/26");
-    expect(numbers).toContain("1/0000002/26");
-    expect(numbers).toContain("1/0000003/26");
+    expect(numbers).toContain("7/0000001/26");
+    expect(numbers).toContain("7/0000002/26");
+    expect(numbers).toContain("7/0000003/26");
   });
 
   it("rejects when user is ADMIN", async () => {
@@ -262,6 +265,47 @@ describe("getClinicalReports", () => {
   });
 });
 
+describe("deleteClinicalReports", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("permanently deletes STAFF reports submitted by that staff member", async () => {
+    const reportIds = ["report-1", "report-2"];
+    (db as any).select = vi.fn(() => createChainable(reportIds.map((id) => ({ id }))));
+    const deleteQuery = { where: vi.fn(() => Promise.resolve()) };
+    (db as any).transaction = vi.fn(async (callback: (tx: unknown) => Promise<unknown>) =>
+      callback({ delete: vi.fn(() => deleteQuery) })
+    );
+
+    const result = await deleteClinicalReports(staffUser, reportIds);
+
+    expect(result).toEqual({ deletedCount: 2 });
+    expect(db.transaction).toHaveBeenCalledTimes(1);
+    expect(deleteQuery.where).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects a STAFF deletion containing another staff member's report", async () => {
+    (db as any).select = vi.fn(() => createChainable([{ id: "report-1" }]));
+    (db as any).transaction = vi.fn();
+
+    await expect(
+      deleteClinicalReports(staffUser, ["report-1", "report-2"])
+    ).rejects.toThrow("one or more selected Clinical Reports");
+    expect(db.transaction).not.toHaveBeenCalled();
+  });
+
+  it("rejects an ADMIN deletion containing a report from another company", async () => {
+    (db as any).select = vi.fn(() => createChainable([]));
+    (db as any).transaction = vi.fn();
+
+    await expect(
+      deleteClinicalReports(adminUser, ["report-from-other-company"])
+    ).rejects.toThrow("one or more selected Clinical Reports");
+    expect(db.transaction).not.toHaveBeenCalled();
+  });
+});
+
 describe("getClinicalReportById", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -311,9 +355,15 @@ describe("generatePdfForReport", () => {
 });
 
 describe("report ID helpers", () => {
-  it("extracts the last character of a company ID as prefix", () => {
-    expect(getReportNumberPrefix("company-7")).toBe("7");
-    expect(getReportNumberPrefix("abc-a")).toBe("A");
+  it("extracts the final digit from the canonical company code", () => {
+    expect(getReportNumberPrefix("BPL-ILKKM007")).toBe("7");
+    expect(getReportNumberPrefix("BPL-ILKKM004")).toBe("4");
+  });
+
+  it("rejects a missing or invalid company code", () => {
+    expect(() => getReportNumberPrefix("company-code")).toThrow(
+      "company code is missing or does not end with a digit"
+    );
   });
 
   it("formats the report ID with a zero-padded sequence and year suffix", () => {
@@ -382,11 +432,12 @@ describe("year reset", () => {
   it("starts a new sequence at 0000001 for a new calendar year", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2027-01-01T10:00:00Z"));
-    mockTransaction(0, "report-2027", "1/0000001/27");
+    (db as any).select = vi.fn(() => createChainable([{ companyCode: "BPL-ILKKM007" }]));
+    mockTransaction(0, "report-2027", "7/0000001/27");
 
     const result = await createClinicalReport(staffUser, validInput);
 
-    expect(result.reportNumber).toBe("1/0000001/27");
+    expect(result.reportNumber).toBe("7/0000001/27");
 
     vi.useRealTimers();
   });

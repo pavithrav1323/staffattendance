@@ -40,6 +40,15 @@ const labels = {
     view: 'View Report',
     downloadDocx: 'Download DOCX',
     edit: 'Edit',
+    selectAll: 'Select All',
+    deselectAll: 'Unselect All',
+    deleteSelected: 'Delete Selected Records',
+    selectedRecords: 'Selected Records',
+    confirmDeleteSelected: 'Are you sure you want to permanently delete the selected Clinical Report records?',
+    cannotUndo: 'This action cannot be undone.',
+    cancel: 'Cancel',
+    deletePermanently: 'Delete Permanently',
+    deleteSuccess: 'Clinical Report deleted successfully.',
     update: 'Update Clinical Report',
     updating: 'Updating...',
     updateSuccess: 'Clinical report updated successfully.',
@@ -82,6 +91,15 @@ const labels = {
     view: 'Lihat Laporan',
     downloadDocx: 'Muat Turun DOCX',
     edit: 'Sunting',
+    selectAll: 'Pilih Semua',
+    deselectAll: 'Nyahpilih Semua',
+    deleteSelected: 'Padam Rekod Dipilih',
+    selectedRecords: 'Rekod Dipilih',
+    confirmDeleteSelected: 'Adakah anda pasti mahu memadam rekod Laporan Klinikal yang dipilih secara kekal?',
+    cannotUndo: 'Tindakan ini tidak boleh dibuat asal.',
+    cancel: 'Batal',
+    deletePermanently: 'Padam Secara Kekal',
+    deleteSuccess: 'Laporan Klinikal berjaya dipadam.',
     update: 'Kemas Kini Laporan Klinikal',
     updating: 'Sedang mengemas kini...',
     updateSuccess: 'Laporan klinikal berjaya dikemas kini.',
@@ -121,6 +139,9 @@ const ClinicalReportsPage = () => {
   const [editingReportId, setEditingReportId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [selectedReportIds, setSelectedReportIds] = useState<Set<string>>(new Set());
+  const [pendingDeleteIds, setPendingDeleteIds] = useState<string[]>([]);
+  const [deleting, setDeleting] = useState(false);
 
   const t = labels[language];
 
@@ -150,17 +171,39 @@ const ClinicalReportsPage = () => {
     });
   };
 
-  const addRow = () => {
-    setForm((prev) => ({ ...prev, rows: [...prev.rows, emptyRow()] }));
+  const parseMultilineToTrainees = (row: ReportRow): ReportRow[] => {
+    const nameLines = row.traineeName.split('\n');
+    const getLine = (value: string, index: number) =>
+      (value.split('\n')[index] ?? '').trim();
+
+    return nameLines
+      .map((name, index) => ({
+        traineeName: name.trim(),
+        group: getLine(row.group, index),
+        monitoringObjective: getLine(row.monitoringObjective, index),
+        teachingLearningActivities: getLine(row.teachingLearningActivities, index),
+        clinicalPracticeRecordBook: getLine(row.clinicalPracticeRecordBook, index),
+        disciplineTraineeWelfareDiscussion: getLine(row.disciplineTraineeWelfareDiscussion, index),
+      }))
+      .filter((r) => r.traineeName.length > 0);
   };
 
-  const removeRow = (index: number) => {
-    setForm((prev) => {
-      if (prev.rows.length <= 1) return prev;
-      const rows = [...prev.rows];
-      rows.splice(index, 1);
-      return { ...prev, rows };
-    });
+  const joinTraineesToMultiline = (trainees: ReportTrainee[]): ReportRow => {
+    const row = emptyRow();
+    const fields: (keyof ReportRow)[] = [
+      'traineeName',
+      'group',
+      'monitoringObjective',
+      'teachingLearningActivities',
+      'clinicalPracticeRecordBook',
+      'disciplineTraineeWelfareDiscussion',
+    ];
+    for (const field of fields) {
+      row[field] = trainees
+        .map((t) => String((t as ReportRow)[field] ?? ''))
+        .join('\n');
+    }
+    return row;
   };
 
   const validate = (): boolean => {
@@ -184,11 +227,12 @@ const ClinicalReportsPage = () => {
 
     setSubmitting(true);
     try {
+      const trainees = parseMultilineToTrainees(form.rows[0]);
       const input = {
         unitLocation: form.unitLocation,
         monitoringDateTime: form.monitoringDateTime,
         language,
-        trainees: form.rows,
+        trainees: trainees as ReportTrainee[],
       };
 
       if (editingReportId) {
@@ -223,7 +267,7 @@ const ClinicalReportsPage = () => {
           reportNumber: response.data?.reportNumber ?? undefined,
           unitLocation: form.unitLocation,
           monitoringDateTime: form.monitoringDateTime,
-          rows: form.rows,
+          rows: trainees,
           language,
         });
         setSuccess(t.success);
@@ -297,12 +341,55 @@ const ClinicalReportsPage = () => {
       setForm({
         unitLocation: detail.unitLocation,
         monitoringDateTime: toDateTimeLocal(detail.monitoringDateTime),
-        rows: detail.trainees.map((trainee) => ({ ...trainee })),
+        rows: [joinTraineesToMultiline(detail.trainees)],
       });
       setEditingReportId(detail.id);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (err: any) {
       setError(err.message || 'Failed to load report');
+    }
+  };
+
+  const requestDelete = (reportIds: string[]) => {
+    if (reportIds.length > 0) setPendingDeleteIds(reportIds);
+  };
+
+  const toggleReportSelection = (reportId: string) => {
+    setSelectedReportIds((current) => {
+      const next = new Set(current);
+      if (next.has(reportId)) next.delete(reportId);
+      else next.add(reportId);
+      return next;
+    });
+  };
+
+  const handleConfirmDelete = async () => {
+    if (pendingDeleteIds.length === 0 || deleting) return;
+
+    setDeleting(true);
+    setError(null);
+    try {
+      const response = await clinicalReportsService.delete(pendingDeleteIds);
+      if (!response.success) {
+        throw new Error(response.message || 'Failed to delete Clinical Report');
+      }
+
+      if (preview?.id && pendingDeleteIds.includes(preview.id)) {
+        setPreview(null);
+        setShowPreviewModal(false);
+      }
+      setSelectedReportIds((current) => {
+        const next = new Set(current);
+        pendingDeleteIds.forEach((id) => next.delete(id));
+        return next;
+      });
+      setPendingDeleteIds([]);
+      await loadReports();
+      setSuccess(t.deleteSuccess);
+    } catch (err: any) {
+      setError(err.message || 'Failed to delete Clinical Report');
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -343,37 +430,22 @@ const ClinicalReportsPage = () => {
 
       {form.rows.map((row, index) => (
         <div key={index} className="clinical-row-form">
-          <div className="clinical-row-header">
-            <h4>{t.traineeRow} {index + 1}</h4>
-            {form.rows.length > 1 && (
-              <button
-                type="button"
-                className="action-button small"
-                onClick={() => removeRow(index)}
-              >
-                {t.removeRow}
-              </button>
-            )}
-          </div>
-
           <div className="form-group">
             <label>{t.traineeName}{t.required}</label>
-            <input
-              type="text"
-              value={row.traineeName}
+            <textarea
+              rows={2}
+              value={row.traineeName ?? ''}
               onChange={(e) => handleRowChange(index, 'traineeName', e.target.value)}
-              maxLength={150}
               required
             />
           </div>
 
           <div className="form-group">
             <label>{t.group}{t.required}</label>
-            <input
-              type="text"
-              value={row.group}
+            <textarea
+              rows={2}
+              value={row.group ?? ''}
               onChange={(e) => handleRowChange(index, 'group', e.target.value)}
-              maxLength={100}
               required
             />
           </div>
@@ -384,7 +456,6 @@ const ClinicalReportsPage = () => {
               rows={3}
               value={row.monitoringObjective}
               onChange={(e) => handleRowChange(index, 'monitoringObjective', e.target.value)}
-              maxLength={2000}
               required
             />
           </div>
@@ -395,7 +466,6 @@ const ClinicalReportsPage = () => {
               rows={4}
               value={row.teachingLearningActivities}
               onChange={(e) => handleRowChange(index, 'teachingLearningActivities', e.target.value)}
-              maxLength={4000}
               required
             />
           </div>
@@ -406,7 +476,6 @@ const ClinicalReportsPage = () => {
               rows={4}
               value={row.clinicalPracticeRecordBook}
               onChange={(e) => handleRowChange(index, 'clinicalPracticeRecordBook', e.target.value)}
-              maxLength={4000}
               required
             />
           </div>
@@ -417,7 +486,6 @@ const ClinicalReportsPage = () => {
               rows={4}
               value={row.disciplineTraineeWelfareDiscussion}
               onChange={(e) => handleRowChange(index, 'disciplineTraineeWelfareDiscussion', e.target.value)}
-              maxLength={4000}
               required
             />
           </div>
@@ -425,14 +493,6 @@ const ClinicalReportsPage = () => {
       ))}
 
       <div className="clinical-form-actions no-print">
-        <button
-          type="button"
-          className="action-button"
-          onClick={addRow}
-          disabled={submitting}
-        >
-          {t.addRow}
-        </button>
         <button
           type="submit"
           className="approve-button"
@@ -485,6 +545,37 @@ const ClinicalReportsPage = () => {
     );
   };
 
+  const renderDeleteModal = () => {
+    if (pendingDeleteIds.length === 0) return null;
+
+    return (
+      <div className="modal-overlay" onClick={() => !deleting && setPendingDeleteIds([])}>
+        <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+          <h3>{t.confirmDeleteSelected}</h3>
+          <p>{t.cannotUndo}</p>
+          <div className="modal-actions">
+            <button
+              type="button"
+              className="approve-button"
+              disabled={deleting}
+              onClick={() => setPendingDeleteIds([])}
+            >
+              {t.cancel}
+            </button>
+            <button
+              type="button"
+              className="reject-button"
+              disabled={deleting}
+              onClick={handleConfirmDelete}
+            >
+              {t.deletePermanently}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   const renderList = () => (
     <div className="clinical-reports-list no-print">
       {loading ? (
@@ -492,10 +583,29 @@ const ClinicalReportsPage = () => {
       ) : reports.length === 0 ? (
         <div className="empty-state">{t.noReports}</div>
       ) : (
+        <>
+        <div className="clinical-row-actions clinical-report-bulk-actions">
+            <button type="button" className="clinical-action-button" onClick={() => setSelectedReportIds(new Set(reports.map((report) => report.id)))}>
+              {t.selectAll}
+            </button>
+            <button type="button" className="clinical-action-button" onClick={() => setSelectedReportIds(new Set())}>
+              {t.deselectAll}
+            </button>
+            <span>{t.selectedRecords}: {selectedReportIds.size}</span>
+            <button
+              type="button"
+              className="reject-button"
+              disabled={selectedReportIds.size === 0}
+              onClick={() => requestDelete(Array.from(selectedReportIds))}
+            >
+              {t.deleteSelected}
+            </button>
+        </div>
         <div className="table-container">
           <table className="staff-table">
             <thead>
               <tr>
+                <th aria-label={t.selectedRecords} />
                 <th>{t.reportId}</th>
                 <th>{t.unitLocation}</th>
                 <th>{t.monitoringAt}</th>
@@ -508,6 +618,14 @@ const ClinicalReportsPage = () => {
             <tbody>
               {reports.map((report) => (
                 <tr key={report.id}>
+                  <td>
+                    <input
+                      type="checkbox"
+                      checked={selectedReportIds.has(report.id)}
+                      onChange={() => toggleReportSelection(report.id)}
+                      aria-label={`${t.selectedRecords}: ${report.reportNumber || report.id}`}
+                    />
+                  </td>
                   <td>{report.reportNumber || report.id.slice(0, 8)}</td>
                   <td>{report.unitLocation}</td>
                   <td>{formatDate(report.monitoringDateTime)}</td>
@@ -532,20 +650,6 @@ const ClinicalReportsPage = () => {
                           {t.edit}
                         </button>
                       )}
-                      <button
-                        type="button"
-                        className="clinical-action-button"
-                        onClick={() => clinicalReportsService.downloadPdf(report.id)}
-                      >
-                        PDF
-                      </button>
-                      <button
-                        type="button"
-                        className="clinical-action-button"
-                        onClick={() => clinicalReportsService.downloadDocx(report.id)}
-                      >
-                        DOCX
-                      </button>
                     </div>
                   </td>
                 </tr>
@@ -553,6 +657,7 @@ const ClinicalReportsPage = () => {
             </tbody>
           </table>
         </div>
+        </>
       )}
     </div>
   );
@@ -585,6 +690,7 @@ const ClinicalReportsPage = () => {
       {renderList()}
 
       {showPreviewModal && renderPreviewModal()}
+      {renderDeleteModal()}
     </div>
   );
 };

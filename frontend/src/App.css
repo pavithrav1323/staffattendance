@@ -427,6 +427,31 @@ body,
   width: max-content;
 }
 
+.editable-time-cell {
+  cursor: pointer;
+}
+
+.editable-time-cell:hover {
+  background: var(--disabled-bg);
+}
+
+.time-edit-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  white-space: nowrap;
+}
+
+.time-edit-controls select {
+  min-width: 3.2rem;
+  padding: 0.2rem;
+}
+
+.time-edit-controls button {
+  padding: 0.25rem 0.4rem;
+  font-size: 0.75rem;
+}
+
 .table-container {
   width: 100%;
   max-width: 100%;
@@ -3875,6 +3900,12 @@ body,
   padding-bottom: 4px;
 }
 
+.clinical-report-bulk-actions {
+  flex-wrap: wrap;
+  overflow-x: visible;
+  margin-bottom: 0.75rem;
+}
+
 .clinical-actions-cell {
   min-width: 210px;
   white-space: nowrap;
@@ -3910,14 +3941,14 @@ body,
 .clinical-doc-header {
   text-align: center;
   position: relative;
-  margin-bottom: 1.2rem;
+  margin-bottom: 0.8rem;
 }
 
 .clinical-logo {
-  height: 90px;
+  height: 70px;
   width: auto;
   display: block;
-  margin: 0 auto 0.4rem;
+  margin: 0 auto 0.3rem;
   object-fit: contain;
 }
 
@@ -3930,7 +3961,7 @@ body,
 }
 
 .clinical-ministry {
-  font-weight: bold;
+  font-weight: 500;
   font-size: 12pt;
   margin-bottom: 0.2rem;
 }
@@ -3939,7 +3970,7 @@ body,
   font-weight: bold;
   font-size: 13pt;
   text-transform: uppercase;
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.6rem;
 }
 
 .clinical-meta-fields {
@@ -3955,7 +3986,7 @@ body,
 
 .clinical-meta-label {
   font-weight: normal;
-  white-space: nowrap;
+  white-space: pre;
 }
 
 .clinical-meta-value {
@@ -3978,8 +4009,12 @@ body,
 
 .clinical-table th,
 .clinical-table td {
-  border: 1.5px solid #000;
-  padding: 4px 6px;
+  border: none;
+  border-left: 1px solid #000;
+  border-right: 1px solid #000;
+  border-top: none;
+  border-bottom: none;
+  padding: 3px 5px;
   vertical-align: top;
   color: #000;
 }
@@ -3990,27 +4025,38 @@ body,
   font-weight: bold;
   background: #fff;
   font-size: 9pt;
+  white-space: pre-line;
 }
 
 .clinical-table td {
   min-height: 60px;
+  white-space: pre-wrap;
+}
+
+.clinical-table thead th {
+  border-top: 1px solid #000;
+  border-bottom: 1px solid #000;
+}
+
+.clinical-table tbody tr:last-child td {
+  border-bottom: 1px solid #000;
 }
 
 .col-bil {
-  width: 3.7%;
+  width: 5%;
   text-align: center;
 }
 
 .col-trainee {
-  width: 23.8%;
+  width: 24%;
 }
 
 .col-group {
-  width: 10.5%;
+  width: 10%;
 }
 
 .col-objective {
-  width: 11.4%;
+  width: 12%;
 }
 
 .col-activities {
@@ -4018,11 +4064,11 @@ body,
 }
 
 .col-record {
-  width: 12.2%;
+  width: 12%;
 }
 
 .col-discipline {
-  width: 13.4%;
+  width: 12%;
 }
 
 .bil-cell {
@@ -4128,7 +4174,20 @@ body,
 
   .clinical-table th,
   .clinical-table td {
-    border: 1px solid #000;
+    border: none;
+    border-left: 1px solid #000;
+    border-right: 1px solid #000;
+    border-top: none;
+    border-bottom: none;
+  }
+
+  .clinical-table thead th {
+    border-top: 1px solid #000;
+    border-bottom: 1px solid #000;
+  }
+
+  .clinical-table tbody tr:last-child td {
+    border-bottom: 1px solid #000;
   }
 }
 
@@ -4156,5 +4215,27 @@ body,
 
   .clinical-signature-block {
     width: 100%;
+  }
+}
+
+.screen-only {
+  display: block;
+}
+
+.print-only {
+  display: none;
+}
+
+@media print {
+  .screen-only {
+    display: none !important;
+  }
+
+  .print-only {
+    display: inline !important;
+  }
+
+  .clinical-meta-value {
+    border-bottom: none !important;
   }
 }

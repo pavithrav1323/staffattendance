@@ -81,6 +81,9 @@ export const clinicalReportsService = {
   update: async (id: string, input: CreateClinicalReportInput): Promise<{ success: boolean; data?: ClinicalReportDetail; message?: string }> =>
     apiRequest(`/clinical-reports/${id}`, 'PUT', input),
 
+  delete: async (reportIds: string[]): Promise<{ success: boolean; data?: { deletedCount: number }; message?: string }> =>
+    apiRequest('/clinical-reports/bulk', 'DELETE', { reportIds }),
+
   downloadPdf: (id: string) => {
     downloadFile(`/clinical-reports/${id}/pdf`, `clinical-report-${id}.pdf`);
   },

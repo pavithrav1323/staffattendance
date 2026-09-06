@@ -1,6 +1,7 @@
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
+import swaggerUi from "swagger-ui-express";
 import attendanceRoutes from "./routes/attendance.routes.js";
 import { authenticateToken } from "./middleware/auth.middleware.js";
 import { errorHandler } from "./middleware/error.middleware.js";
@@ -11,6 +12,7 @@ import programOwnerRoutes from "./routes/program-owner.routes.js";
 import webauthnRoutes from "./routes/webauthn.routes.js";
 import clinicalReportsRoutes from "./routes/clinical-reports.routes.js";
 import { pool } from "./db/connection.js";
+import { swaggerSpec } from "./config/swagger.js";
 
 const app = express();
 
@@ -64,6 +66,12 @@ app.get("/api/health", (_req, res) => {
     status: "healthy",
   });
 });
+
+app.get("/api-docs.json", (_req, res) => {
+  res.json(swaggerSpec);
+});
+
+app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 // Attendance routes with authentication
 app.use("/api/attendance", authenticateToken, attendanceRoutes);

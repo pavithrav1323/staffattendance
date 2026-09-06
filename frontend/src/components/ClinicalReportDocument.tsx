@@ -30,20 +30,20 @@ const docLabels = {
     docRef: 'BPL.KKM.PK (T) 08.3A/17',
     ministry: 'MINISTRY OF HEALTH MALAYSIA',
     title: 'CLINICAL AREA MONITORING REPORT',
-    unitLocation: 'UNIT / LOCATION NAME :',
-    dateTime: 'DATE & TIME OF MONITORING :',
-    reportId: 'REPORT ID :',
+    unitLocation: 'UNIT / LOCATION NAME     : ',
+    dateTime: 'DATE & TIME OF MONITORING : ',
+    reportId: 'REPORT ID : ',
     bil: 'NO.',
-    traineeName: 'TRAINEE NAME',
+    traineeName: 'TRAINEE\nNAME',
     group: 'GROUP',
-    monitoringObjective: 'MONITORING OBJECTIVE',
-    teachingLearningActivities: 'TEACHING AND LEARNING ACTIVITIES',
-    clinicalPracticeRecordBook: 'MONITORING OF CLINICAL PRACTICE RECORD BOOK',
+    monitoringObjective: 'MONITORING\nOBJECTIVE',
+    teachingLearningActivities: 'TEACHING AND\nLEARNING ACTIVITIES',
+    clinicalPracticeRecordBook: 'MONITORING\nOF CLINICAL\nPRACTICE\nRECORD BOOK',
     disciplineTraineeWelfareDiscussion:
-      'DISCIPLINE / TRAINEE WELFARE / DISCUSSION WITH LP / SUPERVISOR',
+      'DISCIPLINE\n/ TRAINEE\nWELFARE /\nDISCUSSION\nWITH LP /\nSUPERVISOR',
     signature: 'Signature:',
     nameOfInstructor: 'Name of Instructor:',
-    tpa: 'TPA:',
+    tpa: 'TPA/KP Verification:',
     date: 'Date:',
     addRow: 'Add Row',
   },
@@ -51,21 +51,21 @@ const docLabels = {
     docRef: 'BPL.KKM.PK (T) 08.3A/17',
     ministry: 'KEMENTERIAN KESIHATAN MALAYSIA',
     title: 'LAPORAN PEMANTAUAN KAWASAN KLINIKAL',
-    unitLocation: 'NAMA UNIT / TEMPAT :',
-    dateTime: 'TARIKH & MASA PEMANTAUAN :',
-    reportId: 'ID LAPORAN :',
+    unitLocation: 'NAMA UNIT/ TEMPAT        : ',
+    dateTime: 'TARIKH & MASA PEMANTAUAN : ',
+    reportId: 'ID LAPORAN : ',
     bil: 'BIL',
-    traineeName: 'NAMA PELATIH',
+    traineeName: 'NAMA\nPELATIH',
     group: 'KUMPULAN',
-    monitoringObjective: 'OBJEKTIF PEMANTAUAN',
-    teachingLearningActivities: 'AKTIVITI PENGAJARAN DAN PEMBELAJARAN',
-    clinicalPracticeRecordBook: 'PEMANTAUAN BUKU REKOD PRAKTIS KLINIKAL',
+    monitoringObjective: 'OBJEKTIF\nPEMANTAUAN',
+    teachingLearningActivities: 'AKTIVITI PENGAJARAN\nDAN\nPEMBELAJARAN',
+    clinicalPracticeRecordBook: 'PEMANTAUAN\nBUKU REKOD\nPRAKTIS\nKLINIKAL',
     disciplineTraineeWelfareDiscussion:
-      'DISIPLIN / KEBAJIKAN PELATIH / PERBINCANGAN DENGAN LP / PENYELIA',
+      'DISIPLIN\nKEBAJIKAN\nPELATIH /\nPERBINCANGAN\nDENGAN LP /\nPENYELIA',
     signature: 'Tandatangan:',
     nameOfInstructor: 'Nama Pengajar:',
-    tpa: 'TPA:',
-    date: 'Tarikh:',
+    tpa: 'Pengesahan TPA/KP',
+    date: 'Tarikh :',
     addRow: 'Tambah Baris',
   },
 };
@@ -106,6 +106,7 @@ const ClinicalReportDocument = forwardRef<HTMLDivElement, ClinicalReportDocument
       language,
       unitLocation,
       monitoringDateTime,
+      reportNumber,
       rows,
       onUnitLocationChange,
       onMonitoringDateTimeChange,
@@ -178,8 +179,8 @@ const ClinicalReportDocument = forwardRef<HTMLDivElement, ClinicalReportDocument
         </div>
 
         <div className="clinical-meta-fields">
-          <div className="clinical-meta-row">
-            <span className="clinical-meta-label">{t.unitLocation}</span>
+          <div className="clinical-meta-row" style={{ gap: 0 }}>
+            <span className="clinical-meta-label" style={{ whiteSpace: 'pre' }}>{t.unitLocation}</span>
             {editable ? (
               <>
                 <input
@@ -188,14 +189,14 @@ const ClinicalReportDocument = forwardRef<HTMLDivElement, ClinicalReportDocument
                   value={unitLocation}
                   onChange={(e) => onUnitLocationChange?.(e.target.value)}
                 />
-                <span className="print-only clinical-meta-value">{unitLocation}</span>
+                <span className="print-only clinical-meta-value" style={{ borderBottom: 'none', minHeight: 'auto' }}>{unitLocation}</span>
               </>
             ) : (
-              <span className="clinical-meta-value">{unitLocation}</span>
+              <span className="clinical-meta-value" style={{ borderBottom: 'none', minHeight: 'auto' }}>{unitLocation}</span>
             )}
           </div>
-          <div className="clinical-meta-row">
-            <span className="clinical-meta-label">{t.dateTime}</span>
+          <div className="clinical-meta-row" style={{ gap: 0 }}>
+            <span className="clinical-meta-label" style={{ whiteSpace: 'pre' }}>{t.dateTime}</span>
             {editable ? (
               <>
                 <input
@@ -204,12 +205,12 @@ const ClinicalReportDocument = forwardRef<HTMLDivElement, ClinicalReportDocument
                   value={toDatetimeLocal(monitoringDateTime)}
                   onChange={(e) => onMonitoringDateTimeChange?.(e.target.value)}
                 />
-                <span className="print-only clinical-meta-value">
+                <span className="print-only clinical-meta-value" style={{ borderBottom: 'none', minHeight: 'auto' }}>
                   {formatDateTime(language, monitoringDateTime)}
                 </span>
               </>
             ) : (
-              <span className="clinical-meta-value">
+              <span className="clinical-meta-value" style={{ borderBottom: 'none', minHeight: 'auto' }}>
                 {formatDateTime(language, monitoringDateTime)}
               </span>
             )}
@@ -279,28 +280,34 @@ const ClinicalReportDocument = forwardRef<HTMLDivElement, ClinicalReportDocument
           </div>
         )}
 
-        <table className="clinical-signatures-table" style={{ width: '100%', borderCollapse: 'collapse', marginTop: '2rem' }}>
+        <table className="clinical-signatures-table" style={{ width: '100%', borderCollapse: 'collapse', marginTop: '1.5rem' }}>
           <tbody>
             <tr>
-              <td style={{ padding: '0 0.5rem 0 0', verticalAlign: 'bottom', whiteSpace: 'nowrap' }}>{t.signature}</td>
-              <td style={{ width: '40%', borderBottom: '1px solid #000', height: '3.5rem', verticalAlign: 'bottom' }} />
-              <td style={{ padding: '0 0.5rem', paddingLeft: '3rem', verticalAlign: 'bottom', whiteSpace: 'nowrap' }}>{t.signature}</td>
-              <td style={{ width: '40%', borderBottom: '1px solid #000', height: '3.5rem', verticalAlign: 'bottom' }} />
+              <td style={{ width: '15%', padding: '0 0.5rem 0 0', verticalAlign: 'bottom', whiteSpace: 'nowrap' }}>{t.signature}</td>
+              <td style={{ width: '35%', height: '2.5rem', verticalAlign: 'bottom' }} />
+              <td style={{ width: '15%', padding: '0 0.5rem', paddingLeft: '1.5rem', verticalAlign: 'bottom', whiteSpace: 'nowrap' }}>{t.signature}</td>
+              <td style={{ width: '35%', height: '2.5rem', verticalAlign: 'bottom' }} />
             </tr>
             <tr>
-              <td style={{ padding: '1rem 0.5rem 0 0', verticalAlign: 'bottom', whiteSpace: 'nowrap' }}>{t.nameOfInstructor}</td>
-              <td style={{ width: '40%', borderBottom: '1px solid #000', height: '2rem', verticalAlign: 'bottom' }} />
-              <td style={{ padding: '1rem 0.5rem', paddingLeft: '3rem', verticalAlign: 'bottom', whiteSpace: 'nowrap' }}>{t.tpa}</td>
-              <td style={{ width: '40%', borderBottom: '1px solid #000', height: '2rem', verticalAlign: 'bottom' }} />
+              <td style={{ width: '15%', padding: '0.5rem 0.5rem 0 0', verticalAlign: 'bottom', whiteSpace: 'nowrap' }}>{t.nameOfInstructor}</td>
+              <td style={{ width: '35%', height: '1.8rem', verticalAlign: 'bottom' }} />
+              <td style={{ width: '15%', padding: '0.5rem 0.5rem', paddingLeft: '1.5rem', verticalAlign: 'bottom', whiteSpace: 'nowrap' }}>{t.tpa}</td>
+              <td style={{ width: '35%', height: '1.8rem', verticalAlign: 'bottom' }} />
             </tr>
             <tr>
-              <td style={{ padding: '1rem 0.5rem 0 0', verticalAlign: 'bottom', whiteSpace: 'nowrap' }}>{t.date}</td>
-              <td style={{ width: '40%', borderBottom: '1px solid #000', height: '2rem', verticalAlign: 'bottom' }} />
-              <td style={{ padding: '1rem 0.5rem', paddingLeft: '3rem', verticalAlign: 'bottom', whiteSpace: 'nowrap' }}>{t.date}</td>
-              <td style={{ width: '40%', borderBottom: '1px solid #000', height: '2rem', verticalAlign: 'bottom' }} />
+              <td style={{ width: '15%', padding: '0.5rem 0.5rem 0 0', verticalAlign: 'bottom', whiteSpace: 'nowrap' }}>{t.date}</td>
+              <td style={{ width: '35%', height: '1.8rem', verticalAlign: 'bottom' }} />
+              <td style={{ width: '15%', padding: '0.5rem 0.5rem', paddingLeft: '1.5rem', verticalAlign: 'bottom', whiteSpace: 'nowrap' }}>{t.date}</td>
+              <td style={{ width: '35%', height: '1.8rem', verticalAlign: 'bottom' }} />
             </tr>
           </tbody>
         </table>
+
+        {reportNumber && (
+          <div className="clinical-doc-footer" style={{ marginTop: '1rem', textAlign: 'right', fontSize: '9pt' }}>
+            {t.reportId}{reportNumber}
+          </div>
+        )}
       </div>
     );
   }

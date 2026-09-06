@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import PDFDocument from "pdfkit-table";
 
 import type { ClinicalReportDetail } from "./clinical-reports.service.js";
+import { CLINICAL_REPORT_LAYOUT } from "./clinical-reports.layout.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -13,43 +14,43 @@ const translations = {
     docRef: "BPL.KKM.PK (T) 08.3A/17",
     ministry: "MINISTRY OF HEALTH MALAYSIA",
     title: "CLINICAL AREA MONITORING REPORT",
-    unitLocation: "UNIT / LOCATION NAME :",
-    dateTime: "DATE & TIME OF MONITORING :",
-    reportId: "REPORT ID :",
+    unitLocation: "UNIT / LOCATION NAME     : ",
+    dateTime: "DATE & TIME OF MONITORING : ",
+    reportId: "REPORT ID : ",
 
     bil: "NO.",
-    traineeName: "TRAINEE NAME",
+    traineeName: "TRAINEE\nNAME",
     group: "GROUP",
-    monitoringObjective: "MONITORING OBJECTIVE",
-    teachingLearningActivities: "TEACHING AND LEARNING ACTIVITIES",
-    clinicalPracticeRecordBook: "MONITORING OF CLINICAL PRACTICE RECORD BOOK",
+    monitoringObjective: "MONITORING\nOBJECTIVE",
+    teachingLearningActivities: "TEACHING AND\nLEARNING ACTIVITIES",
+    clinicalPracticeRecordBook: "MONITORING\nOF CLINICAL\nPRACTICE\nRECORD BOOK",
     disciplineTraineeWelfareDiscussion:
-      "DISCIPLINE / TRAINEE WELFARE / DISCUSSION WITH LP / SUPERVISOR",
+      "DISCIPLINE\n/ TRAINEE\nWELFARE /\nDISCUSSION\nWITH LP /\nSUPERVISOR",
     signature: "Signature:",
     nameOfInstructor: "Name of Instructor:",
-    tpa: "TPA:",
+    tpa: "TPA/KP Verification:",
     date: "Date:",
   },
   ms: {
     docRef: "BPL.KKM.PK (T) 08.3A/17",
     ministry: "KEMENTERIAN KESIHATAN MALAYSIA",
     title: "LAPORAN PEMANTAUAN KAWASAN KLINIKAL",
-    unitLocation: "NAMA UNIT / TEMPAT :",
-    dateTime: "TARIKH & MASA PEMANTAUAN :",
-    reportId: "ID LAPORAN :",
+    unitLocation: "NAMA UNIT/ TEMPAT        : ",
+    dateTime: "TARIKH & MASA PEMANTAUAN : ",
+    reportId: "ID LAPORAN : ",
 
     bil: "BIL",
-    traineeName: "NAMA PELATIH",
+    traineeName: "NAMA\nPELATIH",
     group: "KUMPULAN",
-    monitoringObjective: "OBJEKTIF PEMANTAUAN",
-    teachingLearningActivities: "AKTIVITI PENGAJARAN DAN PEMBELAJARAN",
-    clinicalPracticeRecordBook: "PEMANTAUAN BUKU REKOD PRAKTIS KLINIKAL",
+    monitoringObjective: "OBJEKTIF\nPEMANTAUAN",
+    teachingLearningActivities: "AKTIVITI PENGAJARAN\nDAN\nPEMBELAJARAN",
+    clinicalPracticeRecordBook: "PEMANTAUAN\nBUKU REKOD\nPRAKTIS\nKLINIKAL",
     disciplineTraineeWelfareDiscussion:
-      "DISIPLIN / KEBAJIKAN PELATIH / PERBINCANGAN DENGAN LP / PENYELIA",
+      "DISIPLIN\nKEBAJIKAN\nPELATIH /\nPERBINCANGAN\nDENGAN LP /\nPENYELIA",
     signature: "Tandatangan:",
     nameOfInstructor: "Nama Pengajar:",
-    tpa: "TPA:",
-    date: "Tarikh:",
+    tpa: "Pengesahan TPA/KP",
+    date: "Tarikh :",
   },
 };
 
@@ -96,8 +97,8 @@ export function generateClinicalReportPdf(
 
     const doc = new PDF({
       size: "A4",
-      layout: "landscape",
-      margin: 30,
+      layout: CLINICAL_REPORT_LAYOUT.page.orientation,
+      margin: CLINICAL_REPORT_LAYOUT.margins.topPt,
       bufferPages: true,
     });
 
@@ -107,148 +108,288 @@ export function generateClinicalReportPdf(
     doc.on("error", (err: Error) => reject(err));
 
     const pageWidth = doc.page.width;
-    const rightX = pageWidth - 30;
+    const rightX = pageWidth - CLINICAL_REPORT_LAYOUT.margins.rightPt;
 
-    doc.fontSize(9).text(t.docRef, rightX - 200, 30, {
-      width: 170,
-      align: "right",
+    doc.fontSize(9).text(
+      t.docRef,
+      rightX - 200,
+      CLINICAL_REPORT_LAYOUT.header.documentCode.yPt,
+      {
+        width: CLINICAL_REPORT_LAYOUT.header.documentCode.widthPt,
+        align: "right",
+      }
+    );
+
+    const logoY = CLINICAL_REPORT_LAYOUT.header.logo.yPt;
+    doc.image(logoPath, CLINICAL_REPORT_LAYOUT.header.logo.xPt, logoY, {
+      width: CLINICAL_REPORT_LAYOUT.header.logo.widthPt,
     });
+    doc.y = logoY + 60;
 
-    const logoY = 30;
-    doc.image(logoPath, (pageWidth - 70) / 2, logoY, { width: 70 });
-    doc.y = logoY + 75;
-
-    doc
-      .font("Helvetica-Bold")
-      .fontSize(13)
-      .text(t.ministry, 30, doc.y, { align: "center" });
-    doc.moveDown(0.4);
-    doc.fontSize(15).text(t.title, { align: "center" });
-    doc.moveDown(0.8);
-
-    doc.font("Helvetica-Bold").fontSize(10);
-    doc.text(`${t.unitLocation} ${report.unitLocation}`, 30, doc.y, {
-      continued: false,
+    doc.font("Helvetica").fontSize(13).text(t.ministry, 30, doc.y, {
+      align: "center",
     });
     doc.moveDown(0.3);
-    doc.text(
-      `${t.dateTime} ${formatDateTime(report.monitoringDateTime, report.language)}`,
-      30,
-      doc.y,
-      { continued: false }
-    );
-    doc.moveDown(0.3);
-    doc.text(
-      `${t.reportId} ${report.reportNumber ?? report.id}`,
-      30,
-      doc.y,
-      { continued: false }
-    );
+    doc.font("Helvetica-Bold").fontSize(15).text(t.title, { align: "center" });
     doc.moveDown(0.6);
 
-    const tableWidth = pageWidth - 60;
-    const columnsSize = [
-      Math.round(tableWidth * 0.045),
-      Math.round(tableWidth * 0.235),
-      Math.round(tableWidth * 0.105),
-      Math.round(tableWidth * 0.115),
-      Math.round(tableWidth * 0.25),
-      Math.round(tableWidth * 0.122),
-      Math.round(tableWidth * 0.128),
-    ];
+    doc.font("Helvetica-Bold").fontSize(10);
+    const metadataLabelX = CLINICAL_REPORT_LAYOUT.margins.leftPt;
+    const metadataLabel = (label: string) => label.replace(/:\s*$/, "");
+    const metadataColonX =
+      metadataLabelX + CLINICAL_REPORT_LAYOUT.metadata.labelWidthPt;
+    const metadataValueX =
+      metadataColonX + CLINICAL_REPORT_LAYOUT.metadata.colonWidthPt;
+    const metadataValueWidth =
+      doc.page.width -
+      CLINICAL_REPORT_LAYOUT.margins.rightPt -
+      metadataValueX;
 
-    const table = {
-      headers: [
-        { label: t.bil, property: "no", width: columnsSize[0] },
-        { label: t.traineeName, property: "traineeName", width: columnsSize[1] },
-        { label: t.group, property: "group", width: columnsSize[2] },
-        {
-          label: t.monitoringObjective,
-          property: "monitoringObjective",
-          width: columnsSize[3],
-        },
-        {
-          label: t.teachingLearningActivities,
-          property: "teachingLearningActivities",
-          width: columnsSize[4],
-        },
-        {
-          label: t.clinicalPracticeRecordBook,
-          property: "clinicalPracticeRecordBook",
-          width: columnsSize[5],
-        },
-        {
-          label: t.disciplineTraineeWelfareDiscussion,
-          property: "disciplineTraineeWelfareDiscussion",
-          width: columnsSize[6],
-        },
-      ],
-      datas: report.trainees.map((trainee, index) => ({
-        no: `${index + 1}.`,
-        traineeName: trainee.traineeName,
-        group: trainee.group,
-        monitoringObjective: trainee.monitoringObjective,
-        teachingLearningActivities: trainee.teachingLearningActivities,
-        clinicalPracticeRecordBook: trainee.clinicalPracticeRecordBook,
-        disciplineTraineeWelfareDiscussion: trainee.disciplineTraineeWelfareDiscussion,
-      })),
-    };
-
-    const tableOptions = {
-      x: 30,
-      y: doc.y,
-      width: tableWidth,
-      columnsSize,
-      columnSpacing: 1,
-      padding: 3,
-      prepareHeader: () => {
-        doc.font("Helvetica-Bold").fontSize(7);
-      },
-      prepareRow: () => {
-        doc.font("Helvetica").fontSize(7);
-      },
-    };
-
-    void doc.table(table, tableOptions).then(() => {
-      doc.moveDown(1);
-
-      const leftColX = 30;
-      const colWidth = (pageWidth - 90) / 2;
-      const rightColX = pageWidth - 30 - colWidth;
-      const labelGap = 8;
-
-      const drawFooterRow = (
-        leftLabel: string,
-        rightLabel: string,
-        isSignature = false
-      ) => {
-        const baselineY = doc.y + (isSignature ? 35 : 25);
-
-        doc.font("Helvetica-Bold").fontSize(10);
-
-        const leftLabelWidth = doc.widthOfString(leftLabel);
-        const rightLabelWidth = doc.widthOfString(rightLabel);
-
-        doc.text(leftLabel, leftColX, baselineY, { width: colWidth });
-        doc
-          .moveTo(leftColX + leftLabelWidth + labelGap, baselineY)
-          .lineTo(leftColX + colWidth, baselineY)
-          .stroke();
-
-        doc.text(rightLabel, rightColX, baselineY, { width: colWidth });
-        doc
-          .moveTo(rightColX + rightLabelWidth + labelGap, baselineY)
-          .lineTo(rightColX + colWidth, baselineY)
-          .stroke();
-
-        doc.y = baselineY + (isSignature ? 18 : 12);
-      };
-
-      drawFooterRow(t.signature, t.signature, true);
-      drawFooterRow(t.nameOfInstructor, t.tpa);
-      drawFooterRow(t.date, t.date);
-
-      doc.end();
+    const metadataUnitY = doc.y;
+    doc.text(metadataLabel(t.unitLocation), metadataLabelX, metadataUnitY, {
+      width: CLINICAL_REPORT_LAYOUT.metadata.labelWidthPt,
+      continued: false,
     });
+    doc.text(":", metadataColonX, metadataUnitY, {
+      width: CLINICAL_REPORT_LAYOUT.metadata.colonWidthPt,
+      continued: false,
+    });
+    doc.text(report.unitLocation, metadataValueX, metadataUnitY, {
+      width: metadataValueWidth,
+      continued: false,
+    });
+    doc.moveDown(0.25);
+    const metadataDateY = doc.y;
+    doc.text(metadataLabel(t.dateTime), metadataLabelX, metadataDateY, {
+      width: CLINICAL_REPORT_LAYOUT.metadata.labelWidthPt,
+      continued: false,
+    });
+    doc.text(":", metadataColonX, metadataDateY, {
+      width: CLINICAL_REPORT_LAYOUT.metadata.colonWidthPt,
+      continued: false,
+    });
+    doc.text(formatDateTime(report.monitoringDateTime, report.language), metadataValueX, metadataDateY, {
+      width: metadataValueWidth,
+      continued: false,
+    });
+    doc.moveDown(0.5);
+
+    const tableX = CLINICAL_REPORT_LAYOUT.table.xPt;
+    const tableWidth = CLINICAL_REPORT_LAYOUT.table.widthPt;
+    const colWidths = [...CLINICAL_REPORT_LAYOUT.table.columnWidthsPt];
+
+    const colPositions: number[] = [];
+    let cx = tableX;
+    for (const w of colWidths) {
+      colPositions.push(cx);
+      cx += w;
+    }
+    colPositions.push(cx);
+
+    const cellPadding = CLINICAL_REPORT_LAYOUT.table.cellPaddingPt;
+    const minRowHeight = CLINICAL_REPORT_LAYOUT.table.minimumRowHeightPt;
+    const fontSize = CLINICAL_REPORT_LAYOUT.table.bodyFontSizePt;
+    const headerFontSize = CLINICAL_REPORT_LAYOUT.table.headerFontSizePt;
+    const bottomReserve = CLINICAL_REPORT_LAYOUT.table.bottomReservePt;
+    const pageBottom = doc.page.height - doc.page.margins.bottom;
+
+    function textHeight(
+      text: string,
+      width: number,
+      align: "left" | "center" = "left"
+    ): number {
+      return doc.heightOfString(String(text), {
+        width: Math.max(1, width - 2 * cellPadding),
+        align,
+        lineBreak: true,
+      });
+    }
+
+    function headerHeight(): number {
+      doc.font("Helvetica-Bold").fontSize(headerFontSize);
+      const labels = [
+        t.bil,
+        t.traineeName,
+        t.group,
+        t.monitoringObjective,
+        t.teachingLearningActivities,
+        t.clinicalPracticeRecordBook,
+        t.disciplineTraineeWelfareDiscussion,
+      ];
+      const heights = labels.map((label, i) =>
+        textHeight(label, colWidths[i], "center")
+      );
+      return Math.max(...heights, minRowHeight) + 2 * cellPadding;
+    }
+
+    function rowHeight(row: { [key: string]: string }): number {
+      doc.font("Helvetica").fontSize(fontSize);
+      const values = [
+        row.no,
+        row.traineeName,
+        row.group,
+        row.monitoringObjective,
+        row.teachingLearningActivities,
+        row.clinicalPracticeRecordBook,
+        row.disciplineTraineeWelfareDiscussion,
+      ];
+      const heights = values.map((val, i) =>
+        textHeight(String(val), colWidths[i], "left")
+      );
+      return Math.max(Math.max(...heights, 0) + 2 * cellPadding, minRowHeight);
+    }
+
+    function drawLine(x1: number, y1: number, x2: number, y2: number) {
+      doc
+        .lineWidth(0.5)
+        .strokeColor("#000000")
+        .moveTo(x1, y1)
+        .lineTo(x2, y2)
+        .stroke();
+    }
+
+    function drawHeader(y: number): number {
+      const hHeight = headerHeight();
+      // top border
+      drawLine(tableX, y, tableX + tableWidth, y);
+
+      doc.font("Helvetica-Bold").fontSize(headerFontSize);
+      const labels = [
+        t.bil,
+        t.traineeName,
+        t.group,
+        t.monitoringObjective,
+        t.teachingLearningActivities,
+        t.clinicalPracticeRecordBook,
+        t.disciplineTraineeWelfareDiscussion,
+      ];
+      labels.forEach((label, i) => {
+        const textH = textHeight(label, colWidths[i], "center");
+        const textY = y + cellPadding + (hHeight - 2 * cellPadding - textH) / 2;
+        doc.text(label, colPositions[i] + cellPadding, textY, {
+          width: Math.max(1, colPositions[i + 1] - colPositions[i] - 2 * cellPadding),
+          align: "center",
+        });
+      });
+
+      // header bottom / body separator
+      drawLine(tableX, y + hHeight, tableX + tableWidth, y + hHeight);
+
+      // vertical lines for header
+      colPositions.forEach((xPos) => {
+        drawLine(xPos, y, xPos, y + hHeight);
+      });
+
+      return hHeight;
+    }
+
+    const dataRows = report.trainees.map((trainee, index) => ({
+      no: `${index + 1}.`,
+      traineeName: trainee.traineeName,
+      group: trainee.group,
+      monitoringObjective: trainee.monitoringObjective,
+      teachingLearningActivities: trainee.teachingLearningActivities,
+      clinicalPracticeRecordBook: trainee.clinicalPracticeRecordBook,
+      disciplineTraineeWelfareDiscussion: trainee.disciplineTraineeWelfareDiscussion,
+    }));
+
+    const tableStartY = doc.y;
+
+    // Draw initial header
+    const headerH = drawHeader(tableStartY);
+    doc.y = tableStartY + headerH;
+
+    dataRows.forEach((row, idx) => {
+      const rHeight = rowHeight(row);
+
+      if (doc.y + rHeight > pageBottom - bottomReserve) {
+        // bottom border for current page table
+        drawLine(tableX, doc.y, tableX + tableWidth, doc.y);
+
+        doc.addPage();
+        doc.y = doc.page.margins.top + 30;
+        const newHeaderH = drawHeader(doc.y);
+        doc.y = doc.y + newHeaderH;
+      }
+
+      const rowY = doc.y;
+
+      doc.font("Helvetica").fontSize(fontSize);
+      const values = [
+        row.no,
+        row.traineeName,
+        row.group,
+        row.monitoringObjective,
+        row.teachingLearningActivities,
+        row.clinicalPracticeRecordBook,
+        row.disciplineTraineeWelfareDiscussion,
+      ];
+      values.forEach((val, i) => {
+        const textH = textHeight(String(val), colWidths[i], "left");
+        const textY = rowY + cellPadding;
+        doc.text(String(val), colPositions[i] + cellPadding, textY, {
+          width: Math.max(1, colPositions[i + 1] - colPositions[i] - 2 * cellPadding),
+          align: "left",
+        });
+      });
+
+      // vertical lines for this row
+      colPositions.forEach((xPos) => {
+        drawLine(xPos, rowY, xPos, rowY + rHeight);
+      });
+
+      doc.y = rowY + rHeight;
+    });
+
+    // bottom border
+    drawLine(tableX, doc.y, tableX + tableWidth, doc.y);
+
+    doc.moveDown(1);
+
+    const leftColX = CLINICAL_REPORT_LAYOUT.signatures.leftXPt;
+    const sigColWidth = CLINICAL_REPORT_LAYOUT.signatures.columnWidthPt;
+    const rightColX = CLINICAL_REPORT_LAYOUT.signatures.rightXPt;
+
+    const drawFooterRow = (
+      leftLabel: string,
+      rightLabel: string,
+      isSignature = false
+    ) => {
+      const baselineY =
+        doc.y +
+        (isSignature
+          ? CLINICAL_REPORT_LAYOUT.signatures.firstBaselineOffsetPt
+          : CLINICAL_REPORT_LAYOUT.signatures.subsequentBaselineOffsetPt);
+
+      doc
+        .font(CLINICAL_REPORT_LAYOUT.fonts.bold)
+        .fontSize(CLINICAL_REPORT_LAYOUT.signatures.signatureFontSizePt);
+
+      doc.text(leftLabel, leftColX, baselineY, { width: sigColWidth });
+      doc.text(rightLabel, rightColX, baselineY, { width: sigColWidth });
+
+      doc.y =
+        baselineY +
+        (isSignature
+          ? CLINICAL_REPORT_LAYOUT.signatures.firstAdvancePt
+          : CLINICAL_REPORT_LAYOUT.signatures.subsequentAdvancePt);
+    };
+
+    drawFooterRow(t.signature, t.signature, true);
+    drawFooterRow(t.nameOfInstructor, t.tpa);
+    drawFooterRow(t.date, t.date);
+
+    doc.font(CLINICAL_REPORT_LAYOUT.fonts.regular).fontSize(CLINICAL_REPORT_LAYOUT.footer.fontSizePt);
+    doc.text(
+      `${t.reportId}${report.reportNumber ?? report.id}`,
+      CLINICAL_REPORT_LAYOUT.footer.xPt,
+      CLINICAL_REPORT_LAYOUT.footer.yPt,
+      {
+        width: CLINICAL_REPORT_LAYOUT.table.widthPt,
+        align: "right",
+      }
+    );
+
+    doc.end();
   });
 }
