@@ -3807,6 +3807,11 @@ body,
   width: 100%;
 }
 
+.required-star {
+  color: red;
+  margin-left: 2px;
+}
+
 .clinical-form textarea {
   min-height: 80px;
   resize: vertical;

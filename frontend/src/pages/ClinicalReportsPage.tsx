@@ -58,7 +58,6 @@ const labels = {
     success: 'Clinical report submitted successfully.',
     error: 'Failed to submit. Please check all required fields.',
     invalid: 'All required fields must be filled.',
-    required: ' (required)',
     traineeRow: 'Trainee',
     addRow: 'Add Trainee',
     removeRow: 'Remove Trainee',
@@ -109,7 +108,6 @@ const labels = {
     success: 'Laporan klinikal berjaya dihantar.',
     error: 'Gagal menghantar. Sila semak semua medan yang diperlukan.',
     invalid: 'Semua medan yang diperlukan mesti diisi.',
-    required: ' (diperlukan)',
     traineeRow: 'Pelatih',
     addRow: 'Tambah Pelatih',
     removeRow: 'Buang Pelatih',
@@ -406,7 +404,7 @@ const ClinicalReportsPage = () => {
   const renderForm = () => (
     <form onSubmit={handleSubmit} className="clinical-form no-print">
       <div className="form-group">
-        <label htmlFor="unitLocation">{t.unitLocation}{t.required}</label>
+        <label htmlFor="unitLocation">{t.unitLocation} <span className="required-star">*</span></label>
         <input
           id="unitLocation"
           type="text"
@@ -418,7 +416,7 @@ const ClinicalReportsPage = () => {
       </div>
 
       <div className="form-group">
-        <label htmlFor="monitoringDateTime">{t.dateTime}{t.required}</label>
+        <label htmlFor="monitoringDateTime">{t.dateTime} <span className="required-star">*</span></label>
         <input
           id="monitoringDateTime"
           type="datetime-local"
@@ -431,7 +429,7 @@ const ClinicalReportsPage = () => {
       {form.rows.map((row, index) => (
         <div key={index} className="clinical-row-form">
           <div className="form-group">
-            <label>{t.traineeName}{t.required}</label>
+            <label>{t.traineeName} <span className="required-star">*</span></label>
             <textarea
               rows={2}
               value={row.traineeName ?? ''}
@@ -441,7 +439,7 @@ const ClinicalReportsPage = () => {
           </div>
 
           <div className="form-group">
-            <label>{t.group}{t.required}</label>
+            <label>{t.group} <span className="required-star">*</span></label>
             <textarea
               rows={2}
               value={row.group ?? ''}
@@ -451,7 +449,7 @@ const ClinicalReportsPage = () => {
           </div>
 
           <div className="form-group">
-            <label>{t.monitoringObjective}{t.required}</label>
+            <label>{t.monitoringObjective} <span className="required-star">*</span></label>
             <textarea
               rows={3}
               value={row.monitoringObjective}
@@ -461,7 +459,7 @@ const ClinicalReportsPage = () => {
           </div>
 
           <div className="form-group">
-            <label>{t.teachingLearningActivities}{t.required}</label>
+            <label>{t.teachingLearningActivities} <span className="required-star">*</span></label>
             <textarea
               rows={4}
               value={row.teachingLearningActivities}
@@ -471,7 +469,7 @@ const ClinicalReportsPage = () => {
           </div>
 
           <div className="form-group">
-            <label>{t.clinicalPracticeRecordBook}{t.required}</label>
+            <label>{t.clinicalPracticeRecordBook} <span className="required-star">*</span></label>
             <textarea
               rows={4}
               value={row.clinicalPracticeRecordBook}
@@ -481,7 +479,7 @@ const ClinicalReportsPage = () => {
           </div>
 
           <div className="form-group">
-            <label>{t.disciplineTraineeWelfareDiscussion}{t.required}</label>
+            <label>{t.disciplineTraineeWelfareDiscussion} <span className="required-star">*</span></label>
             <textarea
               rows={4}
               value={row.disciplineTraineeWelfareDiscussion}
