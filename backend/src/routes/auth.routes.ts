@@ -29,8 +29,10 @@ import {
   registerProgramOwnerSchema,
 } from "../modules/auth/auth.schema.js";
 
+import { allowRoles } from "../middleware/role.middleware.js";
 import { validateBody } from "../middleware/validate.middleware.js";
 import {
+  loginRateLimiter,
   refreshRateLimiter,
   passwordResetRateLimiter,
 } from "../middleware/rate-limit.middleware.js";
@@ -130,6 +132,7 @@ router.get(
 
 router.post(
   "/login",
+  loginRateLimiter,
   validateBody(loginSchema),
   async (
     req: Request,
@@ -196,11 +199,19 @@ router.post(
   }
 );
 
+/**
+ * Creating a PROGRAM_OWNER is a privileged operation.
+ * The first PROGRAM_OWNER must be created with the
+ * `npm run bootstrap:program-admin` script; afterwards only an
+ * authenticated PROGRAM_OWNER may create additional Program Owners.
+ */
 router.post(
   "/program-owner/register",
+  authenticateToken,
+  allowRoles("PROGRAM_OWNER"),
   validateBody(registerProgramOwnerSchema),
   async (
-    req: Request,
+    req: AuthRequest,
     res: Response,
     next: NextFunction
   ) => {

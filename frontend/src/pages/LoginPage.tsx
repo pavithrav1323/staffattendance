@@ -1,6 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { authService } from '../services/auth.service';
+import {
+  authService,
+  canChangeOwnPassword,
+  getRoleHomePath,
+  CHANGE_PASSWORD_PATH,
+} from '../services/auth.service';
 import { ApiError } from '../services/api';
 import InstallAppButton from '../components/InstallAppButton';
 import { validateEmail } from '../utils/validation';
@@ -72,21 +77,17 @@ const LoginPage = () => {
         trimmedPassword
       );
       
-      if (user.mustChangePassword) {
-        navigate('/staff/change-password');
+      if (user.mustChangePassword && canChangeOwnPassword(user.role)) {
+        navigate(CHANGE_PASSWORD_PATH);
         return;
       }
 
-      if (user.role === 'STAFF') {
-        navigate('/staff/attendance');
-      } else if (user.role === 'ADMIN') {
-        navigate('/admin');
-      } else if (user.role === 'MASTER_ADMIN') {
-        navigate('/master-admin');
-      } else if (user.role === 'PROGRAM_OWNER') {
-        navigate('/program-owner');
-      } else {
+      const homePath = getRoleHomePath(user.role);
+
+      if (homePath === '/login') {
         setError('Unknown role. Please contact support.');
+      } else {
+        navigate(homePath);
       }
 
       console.log(`[LOGIN-FE] total: ${Math.round(performance.now() - t0)}ms`);

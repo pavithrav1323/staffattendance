@@ -218,6 +218,27 @@ const getMyProfile = async (): Promise<Profile> => {
   throw new Error(response.message || 'Failed to load profile');
 };
 
+const ROLE_HOME_PATHS: Record<string, string> = {
+  STAFF: '/staff/attendance',
+  ADMIN: '/admin',
+  MASTER_ADMIN: '/master-admin',
+  PROGRAM_OWNER: '/program-owner',
+};
+
+/**
+ * Landing route for a role. Returns '/login' for unknown roles.
+ */
+export const getRoleHomePath = (role?: string | null): string =>
+  (role && ROLE_HOME_PATHS[role]) || '/login';
+
+/**
+ * Roles that are allowed to change their own password.
+ */
+export const canChangeOwnPassword = (role?: string | null): boolean =>
+  role === 'STAFF' || role === 'MASTER_ADMIN';
+
+export const CHANGE_PASSWORD_PATH = '/change-password';
+
 export const authService = {
   login,
   getMyProfile,

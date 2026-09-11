@@ -1,9 +1,25 @@
-import rateLimit from "express-rate-limit";
+import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 
+/**
+ * Throttle login attempts per account (falling back to the client IP when no
+ * email is supplied). Keying on the email keeps the limiter accurate when the
+ * API runs behind a proxy or shared NAT, where many legitimate users share a
+ * single IP address.
+ */
 export const loginRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // Maximum 10 attempts per IP in 15 minutes
+  max: 10, // Maximum 10 failed attempts per account in 15 minutes
   skipSuccessfulRequests: true,
+  keyGenerator: (req) => {
+    const email =
+      typeof req.body?.email === "string"
+        ? req.body.email.trim().toLowerCase()
+        : "";
+
+    return email
+      ? `login:${email}`
+      : `login-ip:${ipKeyGenerator(req.ip ?? "")}`;
+  },
   standardHeaders: true,
   legacyHeaders: false,
   statusCode: 429,

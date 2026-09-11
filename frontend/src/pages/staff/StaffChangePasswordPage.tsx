@@ -55,7 +55,7 @@ const StaffChangePasswordPage = () => {
         <h2>Change Password</h2>
 
         <p style={{ marginBottom: '1rem', fontSize: '14px', color: '#475569', textAlign: 'center' }}>
-          Your password was reset by your Admin. Please create a new password to continue.
+          For security reasons, please create a new password to continue.
         </p>
 
         {error && (

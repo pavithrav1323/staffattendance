@@ -44,7 +44,7 @@ export const getPhoneValidationError = (countryCode: string, countryName: string
 };
 
 export const validatePassword = (password: string): boolean => {
-  return /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@#$%^&*!])[A-Za-z\d@#$%^&*!]{7,}$/.test(password);
+  return /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@#$%^&*!])[A-Za-z\d@#$%^&*!]{8,}$/.test(password);
 };
 
 export const validateName = (name: string): boolean => {

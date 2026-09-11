@@ -1,5 +1,10 @@
 import { Navigate, useLocation } from 'react-router-dom';
-import { authService } from '../services/auth.service';
+import {
+  authService,
+  canChangeOwnPassword,
+  getRoleHomePath,
+  CHANGE_PASSWORD_PATH,
+} from '../services/auth.service';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -17,16 +22,24 @@ const ProtectedRoute = ({ children, allowedRoles }: ProtectedRouteProps) => {
 
   if (allowedRoles && currentUser) {
     if (!allowedRoles.includes(currentUser.role)) {
-      return <Navigate to="/login" replace />;
+      // Authenticated but wrong role: send the user to their own dashboard
+      // instead of logging them out.
+      const homePath = getRoleHomePath(currentUser.role);
+
+      if (homePath === location.pathname) {
+        return <Navigate to="/login" replace />;
+      }
+
+      return <Navigate to={homePath} replace />;
     }
   }
 
   if (
-    currentUser?.role === 'STAFF' &&
+    canChangeOwnPassword(currentUser?.role) &&
     currentUser?.mustChangePassword &&
-    !location.pathname.startsWith('/staff/change-password')
+    !location.pathname.includes('change-password')
   ) {
-    return <Navigate to="/staff/change-password" replace />;
+    return <Navigate to={CHANGE_PASSWORD_PATH} replace />;
   }
 
   return <>{children}</>;

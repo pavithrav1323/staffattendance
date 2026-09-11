@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { authService } from './services/auth.service';
+import { authService, getRoleHomePath } from './services/auth.service';
 import ProtectedRoute from './components/ProtectedRoute';
 import LoginPage from './pages/LoginPage';
 import StaffRegisterPage from './pages/StaffRegisterPage';
@@ -35,15 +35,10 @@ function App() {
           path="/"
           element={
             authService.isAuthenticated() ? (
-              authService.getCurrentUser()?.role === 'STAFF' ? (
-                <Navigate to="/staff/attendance" replace />
-              ) : authService.getCurrentUser()?.role === 'ADMIN' ? (
-                <Navigate to="/admin" replace />
-              ) : authService.getCurrentUser()?.role === 'MASTER_ADMIN' ? (
-                <Navigate to="/master-admin" replace />
-              ) : (
-                <Navigate to="/login" replace />
-              )
+              <Navigate
+                to={getRoleHomePath(authService.getCurrentUser()?.role)}
+                replace
+              />
             ) : (
               <Navigate to="/login" replace />
             )
@@ -51,6 +46,14 @@ function App() {
         />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/staff/register" element={<StaffRegisterPage />} />
+        <Route
+          path="/change-password"
+          element={
+            <ProtectedRoute allowedRoles={['STAFF', 'MASTER_ADMIN']}>
+              <StaffChangePasswordPage />
+            </ProtectedRoute>
+          }
+        />
         <Route
           path="/staff/change-password"
           element={

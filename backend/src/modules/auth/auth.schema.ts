@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { strongPasswordSchema } from "../../utils/password.js";
+
 export const registerSchema = z.object({
   companyCode: z.string().trim().min(1),
   employeeId: z.string().trim().min(1),
@@ -17,7 +19,7 @@ export const registerProgramOwnerSchema = z.object({
   name: z.string().trim().min(2),
   email: z.string().trim().email(),
   phone: z.string().trim().min(7).max(30).optional(),
-  password: z.string().min(8),
+  password: strongPasswordSchema,
 });
 
 export const loginSchema = z.object({

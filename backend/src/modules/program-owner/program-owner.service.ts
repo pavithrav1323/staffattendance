@@ -124,6 +124,9 @@ export async function createMasterAdmin(
         passwordHash,
         role: "MASTER_ADMIN",
         status: "APPROVED",
+        // Password is chosen by the Program Owner, so it must be rotated
+        // by the Master Admin on first login.
+        mustChangePassword: true,
       })
       .returning({
         id: users.id,

@@ -21,6 +21,7 @@ import {
   comparePassword,
   hashPassword,
   validatePassword,
+  PASSWORD_POLICY_MESSAGE,
 } from "../../utils/password.js";
 
 import {
@@ -202,9 +203,64 @@ export async function registerStaff(input: RegisterInput) {
   }
 }
 
+const MAX_FAILED_LOGIN_ATTEMPTS = 5;
+const ACCOUNT_LOCK_MINUTES = 15;
+
+function isAccountLocked(lockedUntil: Date | null): boolean {
+  return lockedUntil !== null && new Date(lockedUntil) > new Date();
+}
+
+/**
+ * Counts a failed login attempt and temporarily locks the account once
+ * MAX_FAILED_LOGIN_ATTEMPTS is reached. Returns true when the account was
+ * just locked. The lock is time-based only; the account status is never
+ * changed, so access is restored automatically after it expires.
+ */
+async function registerFailedLoginAttempt(
+  userId: string,
+  currentAttempts: number
+): Promise<boolean> {
+  const attempts = currentAttempts + 1;
+  const shouldLock = attempts >= MAX_FAILED_LOGIN_ATTEMPTS;
+
+  await db
+    .update(users)
+    .set({
+      failedLoginAttempts: shouldLock ? 0 : attempts,
+      lockedUntil: shouldLock
+        ? new Date(Date.now() + ACCOUNT_LOCK_MINUTES * 60 * 1000)
+        : null,
+      updatedAt: new Date(),
+    })
+    .where(eq(users.id, userId));
+
+  return shouldLock;
+}
+
+async function clearFailedLoginAttempts(
+  userId: string,
+  currentAttempts: number,
+  lockedUntil: Date | null
+): Promise<void> {
+  if (currentAttempts === 0 && lockedUntil === null) {
+    return;
+  }
+
+  await db
+    .update(users)
+    .set({
+      failedLoginAttempts: 0,
+      lockedUntil: null,
+      updatedAt: new Date(),
+    })
+    .where(eq(users.id, userId));
+}
+
 export async function login(input: LoginInput) {
   logger.info("Login attempt received");
   const start = performance.now();
+
+  const normalizedEmail = normalizeEmail(input.email);
 
   const [user] = await db
     .select({
@@ -215,6 +271,9 @@ export async function login(input: LoginInput) {
       role: users.role,
       passwordHash: users.passwordHash,
       status: users.status,
+      isDeleted: users.isDeleted,
+      failedLoginAttempts: users.failedLoginAttempts,
+      lockedUntil: users.lockedUntil,
       companyId: users.companyId,
       companyName: companies.companyName,
       companyCode: companies.companyCode,
@@ -228,7 +287,7 @@ export async function login(input: LoginInput) {
     .from(users)
     .leftJoin(companies, eq(users.companyId, companies.id))
     .leftJoin(departments, eq(users.departmentId, departments.id))
-    .where(eq(users.email, input.email))
+    .where(eq(users.email, normalizedEmail))
     .limit(1);
 
   const t1 = performance.now();
@@ -236,6 +295,19 @@ export async function login(input: LoginInput) {
 
   if (!user) {
     throw new AppError(401, "Invalid email or password");
+  }
+
+  // Removed (soft-deleted) accounts must never receive tokens
+  if (user.isDeleted) {
+    throw new AppError(401, "Invalid email or password");
+  }
+
+  if (isAccountLocked(user.lockedUntil)) {
+    throw new AppError(
+      403,
+      "Too many failed login attempts. Please try again later.",
+      "ACCOUNT_LOCKED"
+    );
   }
 
   const passwordMatches = await comparePassword(
@@ -247,8 +319,27 @@ export async function login(input: LoginInput) {
   console.log(`[LOGIN] bcrypt: ${Math.round(t2 - t1)}ms`);
 
   if (!passwordMatches) {
+    const locked = await registerFailedLoginAttempt(
+      user.id,
+      user.failedLoginAttempts
+    );
+
+    if (locked) {
+      throw new AppError(
+        403,
+        "Too many failed login attempts. Please try again later.",
+        "ACCOUNT_LOCKED"
+      );
+    }
+
     throw new AppError(401, "Invalid email or password");
   }
+
+  await clearFailedLoginAttempts(
+    user.id,
+    user.failedLoginAttempts,
+    user.lockedUntil
+  );
 
   if (user.status === "DISABLED") {
     throw new AppError(
@@ -544,10 +635,7 @@ export async function changePassword(
   newPassword: string
 ) {
   if (!validatePassword(newPassword)) {
-    throw new AppError(
-      400,
-      "Password must be at least 8 characters and include uppercase, lowercase, number, and special character"
-    );
+    throw new AppError(400, PASSWORD_POLICY_MESSAGE);
   }
 
   const [user] = await db
@@ -565,8 +653,11 @@ export async function changePassword(
     throw new AppError(404, "User not found");
   }
 
-  if (user.role !== "STAFF") {
-    throw new AppError(403, "Only Staff users can use this endpoint");
+  if (user.role !== "STAFF" && user.role !== "MASTER_ADMIN") {
+    throw new AppError(
+      403,
+      "Only Staff and Master Admin users can use this endpoint"
+    );
   }
 
   if (user.status !== "APPROVED") {
