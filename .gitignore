@@ -11,6 +11,16 @@ dist/
 .env.*
 **/.env
 **/.env.*
+
+# Allow safe example environment files
+!.env.example
+!**/.env.example
+
+# Staging-only local files
+backend/.staging-database-url
+backend/tmp-staging-*.mts
+
+# Secret files
 .secret*
 **/.secret*
 
@@ -31,3 +41,7 @@ dist/
 .vscode/
 .idea/
 .DS_Store
+
+# Local staging files
+backend/.staging-database-url
+backend/tmp-staging-*.mts
