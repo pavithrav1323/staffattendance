@@ -4123,6 +4123,28 @@ body,
   overflow: auto;
 }
 
+/* Preview modal: the action bar stays pinned and the report below it owns the
+   scrollbars, so the modal itself never grows outside the viewport. */
+.clinical-reports-page .modal-content.clinical-preview-modal {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.clinical-preview-modal .clinical-preview-modal-actions {
+  flex: 0 0 auto;
+}
+
+/* Scroll viewport for the A4 document: scrolls on both axes instead of
+   compressing the report to the available width. */
+.clinical-preview-modal .clinical-preview-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
 /* Print / PDF styles */
 @media print {
   @page {
@@ -4207,10 +4229,29 @@ body,
     flex-wrap: wrap;
   }
 
-  .clinical-document {
-    min-width: 0;
-    padding: 10mm;
-    font-size: 9.5pt;
+  /* The A4 document deliberately keeps its desktop width, padding and font
+     size on mobile. `.clinical-preview-scroll` scrolls it horizontally rather
+     than squeezing the seven fixed-width columns into the viewport, which is
+     what caused the headings and text to overlap. */
+
+  /* Keep the preview modal inside the viewport and let the buttons wrap onto
+     as many rows as they need so none of them are cut off. */
+  .clinical-reports-page .modal-content.clinical-preview-modal {
+    width: 100%;
+    max-width: 100%;
+    padding: 12px;
+  }
+
+  .clinical-preview-modal-actions {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    overflow-x: visible;
+    gap: 8px;
+  }
+
+  .clinical-preview-modal-actions .approve-button,
+  .clinical-preview-modal-actions .reject-button {
+    flex: 1 1 auto;
   }
 
   .clinical-signatures {

@@ -45,3 +45,6 @@ backend/tmp-staging-*.mts
 # Local staging files
 backend/.staging-database-url
 backend/tmp-staging-*.mts
+
+# Database backups
+backups/

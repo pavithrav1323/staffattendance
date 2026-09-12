@@ -1,4 +1,4 @@
-import { eq, and, isNull } from "drizzle-orm";
+import { eq, and, isNull, lt, or, isNotNull } from "drizzle-orm";
 import { db } from "../../db/connection.js";
 import { refreshTokens } from "../../db/schema/refresh-tokens.js";
 import { AppError } from "../../utils/app-error.js";
@@ -80,4 +80,51 @@ export async function revokeAllUserRefreshTokens(userId: string) {
         isNull(refreshTokens.revokedAt)
       )
     );
+}
+
+const REVOKED_TOKEN_RETENTION_DAYS = 7;
+
+export async function cleanupRefreshTokens(dryRun: boolean = true) {
+  const now = new Date();
+  const revokedCutoff = new Date(
+    now.getTime() - REVOKED_TOKEN_RETENTION_DAYS * 24 * 60 * 60 * 1000
+  );
+
+  const targetCondition = or(
+    lt(refreshTokens.expiresAt, now),
+    and(
+      isNotNull(refreshTokens.revokedAt),
+      lt(refreshTokens.revokedAt, revokedCutoff)
+    )
+  );
+
+  if (dryRun) {
+    const rows = await db
+      .select({
+        id: refreshTokens.id,
+        expiresAt: refreshTokens.expiresAt,
+        revokedAt: refreshTokens.revokedAt,
+      })
+      .from(refreshTokens)
+      .where(targetCondition);
+
+    return {
+      mode: "dry-run" as const,
+      wouldDelete: rows.length,
+      expiredTokens: rows.filter((r) => r.expiresAt < now).length,
+      oldRevokedTokens: rows.filter(
+        (r) => r.revokedAt && new Date(r.revokedAt) < revokedCutoff
+      ).length,
+    };
+  }
+
+  const deleted = await db
+    .delete(refreshTokens)
+    .where(targetCondition)
+    .returning({ id: refreshTokens.id });
+
+  return {
+    mode: "apply" as const,
+    deleted: deleted.length,
+  };
 }

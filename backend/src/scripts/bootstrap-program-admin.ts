@@ -1,10 +1,12 @@
-import "dotenv/config";
-import { inArray, sql } from "drizzle-orm";
+import { and, eq, ilike, sql } from "drizzle-orm";
+import { config as dotenvConfig } from "dotenv";
+import { fileURLToPath } from "node:url";
+import { resolve } from "node:path";
 
 import { db, pool } from "../db/connection.js";
 import { users } from "../db/schema/users.js";
 import { normalizeEmail, normalizeEmployeeId } from "../utils/normalization.js";
-import { hashPassword, validatePassword } from "../utils/password.js";
+import { hashPassword } from "../utils/password.js";
 import { registerProgramOwnerSchema } from "../modules/auth/auth.schema.js";
 
 const requiredEnvironmentVariables = [
@@ -13,8 +15,6 @@ const requiredEnvironmentVariables = [
   "BOOTSTRAP_NAME",
   "BOOTSTRAP_EMPLOYEE_ID",
 ] as const;
-
-const privilegedRoles = ["PROGRAM_OWNER", "MASTER_ADMIN", "ADMIN"] as const;
 
 function readEnvironment() {
   const values = Object.fromEntries(
@@ -36,12 +36,6 @@ function readEnvironment() {
     throw new Error(`Invalid bootstrap account details: ${input.error.issues.map((issue) => issue.message).join("; ")}`);
   }
 
-  if (!validatePassword(input.data.password)) {
-    throw new Error(
-      "BOOTSTRAP_PASSWORD must contain uppercase, lowercase, number, and special character"
-    );
-  }
-
   return {
     email: normalizeEmail(input.data.email),
     password: input.data.password,
@@ -50,22 +44,32 @@ function readEnvironment() {
   };
 }
 
-async function bootstrap() {
+export async function bootstrap() {
+  const account = readEnvironment();
+
   await db.transaction(async (tx) => {
     await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext('staff-tracker-bootstrap'))`);
 
-    const [existingPrivilegedAccount] = await tx
+    const [existingByEmail] = await tx
       .select({ id: users.id })
       .from(users)
-      .where(inArray(users.role, [...privilegedRoles]))
+      .where(eq(users.email, account.email))
       .limit(1);
 
-    if (existingPrivilegedAccount) {
-      console.log("Bootstrap aborted: privileged account already exists.");
-      return;
+    if (existingByEmail) {
+      throw new Error("Bootstrap aborted: email already registered.");
     }
 
-    const account = readEnvironment();
+    const [existingByEmployeeId] = await tx
+      .select({ id: users.id })
+      .from(users)
+      .where(and(eq(users.role, "PROGRAM_OWNER"), ilike(users.employeeId, account.employeeId)))
+      .limit(1);
+
+    if (existingByEmployeeId) {
+      throw new Error("Bootstrap aborted: employee ID already registered.");
+    }
+
     await tx.insert(users).values({
       companyId: null,
       employeeId: account.employeeId,
@@ -79,16 +83,21 @@ async function bootstrap() {
       mustChangePassword: false,
       isDeleted: false,
     });
-
-    console.log("Bootstrap completed: PROGRAM_OWNER account created.");
   });
+
+  console.log("Bootstrap completed: PROGRAM_OWNER account created.");
 }
 
-bootstrap()
-  .catch((error: unknown) => {
-    console.error(error instanceof Error ? error.message : "Bootstrap failed.");
-    process.exitCode = 1;
-  })
-  .finally(async () => {
-    await pool.end();
-  });
+const isMain = process.argv[1] && resolve(fileURLToPath(import.meta.url)) === resolve(process.argv[1]);
+
+if (isMain) {
+  dotenvConfig();
+  bootstrap()
+    .catch((error: unknown) => {
+      console.error(error instanceof Error ? error.message : "Bootstrap failed.");
+      process.exitCode = 1;
+    })
+    .finally(async () => {
+      await pool.end();
+    });
+}

@@ -506,7 +506,10 @@ const ClinicalReportsPage = () => {
     if (!preview) return null;
     return (
       <div className="modal-overlay" onClick={() => setShowPreviewModal(false)}>
-        <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+        <div
+          className="modal-content clinical-preview-modal"
+          onClick={(e) => e.stopPropagation()}
+        >
           <div className="modal-actions no-print clinical-preview-modal-actions">
             <button
               type="button"
@@ -530,14 +533,16 @@ const ClinicalReportsPage = () => {
               {t.close}
             </button>
           </div>
-          <ClinicalReportDocument
-            language={preview.language}
-            unitLocation={preview.unitLocation}
-            monitoringDateTime={preview.monitoringDateTime}
-            reportNumber={preview.reportNumber}
-            rows={preview.rows}
-            showActions={false}
-          />
+          <div className="clinical-preview-scroll">
+            <ClinicalReportDocument
+              language={preview.language}
+              unitLocation={preview.unitLocation}
+              monitoringDateTime={preview.monitoringDateTime}
+              reportNumber={preview.reportNumber}
+              rows={preview.rows}
+              showActions={false}
+            />
+          </div>
         </div>
       </div>
     );
