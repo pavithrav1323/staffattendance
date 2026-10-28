@@ -352,24 +352,42 @@ export async function updateClinicalReport(
   return getClinicalReportById(authUser, reportId);
 }
 
+function resolveReportLanguage(value: unknown): "en" | "ms" | undefined {
+  if (value === undefined || value === null || value === "") {
+    return undefined;
+  }
+  if (value === "en" || value === "ms") {
+    return value;
+  }
+  throw new AppError(400, "Invalid language. Supported values: en, ms");
+}
+
 export async function generatePdfForReport(
   authUser: AuthUser,
-  reportId: string
+  reportId: string,
+  language?: unknown
 ): Promise<Buffer> {
   assertCompanyContext(authUser);
 
   const report = await getClinicalReportById(authUser, reportId);
-  return generateClinicalReportPdf(report);
+  const lang = resolveReportLanguage(language);
+  return generateClinicalReportPdf(
+    lang ? { ...report, language: lang } : report
+  );
 }
 
 export async function generateDocxForReport(
   authUser: AuthUser,
-  reportId: string
+  reportId: string,
+  language?: unknown
 ): Promise<Buffer> {
   assertCompanyContext(authUser);
 
   const report = await getClinicalReportById(authUser, reportId);
-  return generateClinicalReportDocx(report);
+  const lang = resolveReportLanguage(language);
+  return generateClinicalReportDocx(
+    lang ? { ...report, language: lang } : report
+  );
 }
 
 export async function deleteClinicalReports(

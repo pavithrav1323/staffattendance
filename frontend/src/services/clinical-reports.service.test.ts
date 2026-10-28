@@ -2,6 +2,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { clinicalReportsService } from './clinical-reports.service';
+import { docLabels } from '../components/ClinicalReportDocument';
 
 vi.mock('./api', () => ({
   apiRequest: vi.fn(),
@@ -84,5 +85,57 @@ describe('clinicalReportsService downloads', () => {
       clinicalReportsService.downloadPdf('report-1')
     ).resolves.toBeUndefined();
     expect(HTMLAnchorElement.prototype.click).toHaveBeenCalled();
+  });
+
+  it('passes the selected language to the PDF and DOCX endpoints', async () => {
+    const fetchMock = vi.fn(async (_url: unknown) => ({
+      ok: true,
+      blob: async () => new Blob(['x']),
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await clinicalReportsService.downloadPdf('report-1', 'ms');
+    await clinicalReportsService.downloadDocx('report-1', 'ms');
+    await clinicalReportsService.downloadPdf('report-2', 'en');
+    await clinicalReportsService.downloadDocx('report-2', 'en');
+
+    const urls = fetchMock.mock.calls.map((call) => String(call[0]));
+    expect(urls[0]).toContain('/clinical-reports/report-1/pdf?lang=ms');
+    expect(urls[1]).toContain('/clinical-reports/report-1/docx?lang=ms');
+    expect(urls[2]).toContain('/clinical-reports/report-2/pdf?lang=en');
+    expect(urls[3]).toContain('/clinical-reports/report-2/docx?lang=en');
+  });
+
+  it('omits the lang parameter when no language is selected', async () => {
+    const fetchMock = vi.fn(async (_url: unknown) => ({
+      ok: true,
+      blob: async () => new Blob(['x']),
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await clinicalReportsService.downloadPdf('report-1');
+
+    expect(String(fetchMock.mock.calls[0][0])).not.toContain('lang=');
+  });
+});
+
+describe('clinical report document dictionaries', () => {
+  it('provides the same set of labels in English and Malay', () => {
+    expect(Object.keys(docLabels.en).sort()).toEqual(
+      Object.keys(docLabels.ms).sort()
+    );
+  });
+
+  it('translates every static report label between English and Malay', () => {
+    const keys = Object.keys(docLabels.en) as (keyof typeof docLabels.en)[];
+    for (const key of keys) {
+      expect(docLabels.ms[key]).toBeTruthy();
+    }
+    expect(docLabels.ms.title).toBe('LAPORAN PEMANTAUAN KAWASAN KLINIKAL');
+    expect(docLabels.ms.ministry).toBe('KEMENTERIAN KESIHATAN MALAYSIA');
+    expect(docLabels.ms.signature).toBe('Tandatangan:');
+    expect(docLabels.ms.nameOfInstructor).toBe('Nama Pengajar:');
+    expect(docLabels.en.title).toBe('CLINICAL AREA MONITORING REPORT');
+    expect(docLabels.en.ministry).toBe('MINISTRY OF HEALTH MALAYSIA');
   });
 });

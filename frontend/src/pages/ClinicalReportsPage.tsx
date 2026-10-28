@@ -279,10 +279,15 @@ const ClinicalReportsPage = () => {
     }
   };
 
+  const handleLanguageChange = (lang: Language) => {
+    setLanguage(lang);
+    setPreview((prev) => (prev ? { ...prev, language: lang } : prev));
+  };
+
   const handleDownload = async () => {
     if (!preview?.id) return;
     try {
-      await clinicalReportsService.downloadPdf(preview.id);
+      await clinicalReportsService.downloadPdf(preview.id, preview.language);
     } catch (err: any) {
       setError(err.message || 'Failed to download PDF');
     }
@@ -291,7 +296,7 @@ const ClinicalReportsPage = () => {
   const handleDownloadDocx = async () => {
     if (!preview?.id) return;
     try {
-      await clinicalReportsService.downloadDocx(preview.id);
+      await clinicalReportsService.downloadDocx(preview.id, preview.language);
     } catch (err: any) {
       setError(err.message || 'Failed to download DOCX');
     }
@@ -305,6 +310,7 @@ const ClinicalReportsPage = () => {
       }
 
       const detail = response.data as ClinicalReportDetail;
+      setLanguage(detail.language as Language);
       setPreview({
         id: detail.id,
         reportNumber: detail.reportNumber ?? undefined,
@@ -511,6 +517,22 @@ const ClinicalReportsPage = () => {
           onClick={(e) => e.stopPropagation()}
         >
           <div className="modal-actions no-print clinical-preview-modal-actions">
+            <div className="clinical-language-toggle">
+              <button
+                type="button"
+                className={`clinical-language-button${language === 'en' ? ' active' : ''}`}
+                onClick={() => handleLanguageChange('en')}
+              >
+                {t.english}
+              </button>
+              <button
+                type="button"
+                className={`clinical-language-button${language === 'ms' ? ' active' : ''}`}
+                onClick={() => handleLanguageChange('ms')}
+              >
+                {t.malay}
+              </button>
+            </div>
             <button
               type="button"
               className="approve-button"
@@ -535,7 +557,7 @@ const ClinicalReportsPage = () => {
           </div>
           <div className="clinical-preview-scroll">
             <ClinicalReportDocument
-              language={preview.language}
+              language={language}
               unitLocation={preview.unitLocation}
               monitoringDateTime={preview.monitoringDateTime}
               reportNumber={preview.reportNumber}
@@ -672,14 +694,14 @@ const ClinicalReportsPage = () => {
           <button
             type="button"
             className={`clinical-language-button${language === 'en' ? ' active' : ''}`}
-            onClick={() => setLanguage('en')}
+            onClick={() => handleLanguageChange('en')}
           >
             {t.english}
           </button>
           <button
             type="button"
             className={`clinical-language-button${language === 'ms' ? ' active' : ''}`}
-            onClick={() => setLanguage('ms')}
+            onClick={() => handleLanguageChange('ms')}
           >
             {t.malay}
           </button>

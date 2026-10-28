@@ -25,7 +25,7 @@ interface ClinicalReportDocumentProps {
   showActions?: boolean;
 }
 
-const docLabels = {
+export const docLabels = {
   en: {
     docRef: 'BPL.KKM.PK (T) 08.3A/17',
     ministry: 'MINISTRY OF HEALTH MALAYSIA',

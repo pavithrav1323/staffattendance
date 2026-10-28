@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import zlib from "node:zlib";
 import type { AuthRequest } from "../../middleware/auth.middleware.js";
 import { db } from "../../db/connection.js";
 import {
@@ -337,6 +338,37 @@ describe("getClinicalReportById", () => {
   });
 });
 
+function pdfTextContent(pdf: Buffer): string {
+  const parts: string[] = [];
+  let cursor = 0;
+  while (true) {
+    const streamStart = pdf.indexOf("stream", cursor);
+    if (streamStart === -1) break;
+    const dataStart = pdf.indexOf("\n", streamStart) + 1;
+    const streamEnd = pdf.indexOf("endstream", dataStart);
+    if (streamEnd === -1) break;
+    try {
+      const inflated = zlib
+        .inflateSync(pdf.subarray(dataStart, streamEnd))
+        .toString("latin1");
+      for (const op of inflated.matchAll(/\[(.*?)\]\s*TJ/gs)) {
+        parts.push(
+          [...op[1].matchAll(/<([0-9A-Fa-f]+)>/g)]
+            .map((m) => Buffer.from(m[1], "hex").toString("latin1"))
+            .join("")
+        );
+      }
+      for (const op of inflated.matchAll(/\((.*?)\)\s*Tj/gs)) {
+        parts.push(op[1]);
+      }
+    } catch {
+      // not a deflated stream
+    }
+    cursor = streamEnd + 9;
+  }
+  return parts.join("\n");
+}
+
 describe("generatePdfForReport", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -351,6 +383,44 @@ describe("generatePdfForReport", () => {
 
     expect(pdf).toBeInstanceOf(Buffer);
     expect(pdf.length).toBeGreaterThan(0);
+  });
+
+  it("generates the PDF in the stored report language when no override is given", async () => {
+    const text = pdfTextContent(await generatePdfForReport(staffUser, "report-1"));
+
+    expect(text).toContain("CLINICAL AREA MONITORING REPORT");
+    expect(text).not.toContain("LAPORAN PEMANTAUAN KAWASAN KLINIKAL");
+  });
+
+  it("honours a Malay language override for the generated PDF", async () => {
+    const text = pdfTextContent(
+      await generatePdfForReport(staffUser, "report-1", "ms")
+    );
+
+    expect(text).toContain("LAPORAN PEMANTAUAN KAWASAN KLINIKAL");
+    expect(text).toContain("KEMENTERIAN KESIHATAN MALAYSIA");
+    expect(text).not.toContain("CLINICAL AREA MONITORING REPORT");
+  });
+
+  it("honours an explicit English override", async () => {
+    Object.assign(db, {
+      select: vi.fn(() =>
+        createChainable([{ ...matchedReport, language: "ms" }])
+      ),
+    });
+
+    const text = pdfTextContent(
+      await generatePdfForReport(staffUser, "report-1", "en")
+    );
+
+    expect(text).toContain("CLINICAL AREA MONITORING REPORT");
+    expect(text).not.toContain("LAPORAN PEMANTAUAN KAWASAN KLINIKAL");
+  });
+
+  it("rejects an unsupported language override with a 400 error", async () => {
+    await expect(
+      generatePdfForReport(staffUser, "report-1", "fr")
+    ).rejects.toMatchObject({ statusCode: 400 });
   });
 });
 

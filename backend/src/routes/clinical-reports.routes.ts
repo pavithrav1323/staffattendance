@@ -176,7 +176,11 @@ router.get(
   ) => {
     try {
       const reportId = req.params.id as string;
-      const pdfBuffer = await generatePdfForReport(req.user!, reportId);
+      const pdfBuffer = await generatePdfForReport(
+        req.user!,
+        reportId,
+        req.query.lang
+      );
 
       res.setHeader(
         "Content-Disposition",
@@ -204,7 +208,11 @@ router.get(
   ) => {
     try {
       const reportId = req.params.id as string;
-      const docxBuffer = await generateDocxForReport(req.user!, reportId);
+      const docxBuffer = await generateDocxForReport(
+        req.user!,
+        reportId,
+        req.query.lang
+      );
 
       res.setHeader(
         "Content-Disposition",

@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import zlib from "node:zlib";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AppError } from "../../utils/app-error.js";
@@ -38,6 +39,40 @@ const sampleReport: ClinicalReportDetail = {
   createdAt: new Date("2026-09-03T10:00:00Z"),
   updatedAt: new Date("2026-09-03T10:00:00Z"),
 };
+
+// PDFKit compresses content streams and emits text as hex-encoded segments
+// inside [ ... ] TJ arrays interleaved with kerning numbers. Inflate each
+// stream and join only the hex string segments to recover the rendered text.
+function pdfTextContent(pdf: Buffer): string {
+  const parts: string[] = [];
+  let cursor = 0;
+  while (true) {
+    const streamStart = pdf.indexOf("stream", cursor);
+    if (streamStart === -1) break;
+    const dataStart = pdf.indexOf("\n", streamStart) + 1;
+    const streamEnd = pdf.indexOf("endstream", dataStart);
+    if (streamEnd === -1) break;
+    try {
+      const inflated = zlib
+        .inflateSync(pdf.subarray(dataStart, streamEnd))
+        .toString("latin1");
+      for (const op of inflated.matchAll(/\[(.*?)\]\s*TJ/gs)) {
+        parts.push(
+          [...op[1].matchAll(/<([0-9A-Fa-f]+)>/g)]
+            .map((m) => Buffer.from(m[1], "hex").toString("latin1"))
+            .join("")
+        );
+      }
+      for (const op of inflated.matchAll(/\((.*?)\)\s*Tj/gs)) {
+        parts.push(op[1]);
+      }
+    } catch {
+      // not a deflated stream (e.g. embedded font/image data)
+    }
+    cursor = streamEnd + 9;
+  }
+  return parts.join("\n");
+}
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -85,5 +120,50 @@ describe("generateClinicalReportPdf", () => {
       statusCode: 500,
       code: "PDF_ASSET_MISSING",
     });
+  });
+});
+
+describe("generateClinicalReportPdf languages", () => {
+  it("renders all static report text in English for an English report", async () => {
+    const text = pdfTextContent(
+      await generateClinicalReportPdf({ ...sampleReport, language: "en" })
+    );
+
+    expect(text).toContain("MINISTRY OF HEALTH MALAYSIA");
+    expect(text).toContain("CLINICAL AREA MONITORING REPORT");
+    expect(text).toContain("Signature:");
+    expect(text).toContain("REPORT ID :");
+    expect(text).not.toContain("LAPORAN PEMANTAUAN");
+    expect(text).not.toContain("KEMENTERIAN KESIHATAN");
+  });
+
+  it("renders all static report text in Malay for a Malay report", async () => {
+    const text = pdfTextContent(
+      await generateClinicalReportPdf({ ...sampleReport, language: "ms" })
+    );
+
+    expect(text).toContain("KEMENTERIAN KESIHATAN MALAYSIA");
+    expect(text).toContain("LAPORAN PEMANTAUAN KAWASAN KLINIKAL");
+    expect(text).toContain("Tandatangan:");
+    expect(text).toContain("Nama Pengajar:");
+    expect(text).toContain("Pengesahan TPA/KP");
+    expect(text).toContain("ID LAPORAN :");
+    expect(text).toContain("NAMA");
+    expect(text).toContain("KUMPULAN");
+    expect(text).toContain("OBJEKTIF");
+    expect(text).not.toContain("CLINICAL AREA MONITORING REPORT");
+    expect(text).not.toContain("Name of Instructor:");
+  });
+
+  it("keeps user-entered data untranslated in both languages", async () => {
+    for (const language of ["en", "ms"] as const) {
+      const text = pdfTextContent(
+        await generateClinicalReportPdf({ ...sampleReport, language })
+      );
+
+      expect(text).toContain(sampleReport.unitLocation);
+      expect(text).toContain("Ahmad Bin Ali");
+      expect(text).toContain("January 2024 Intake");
+    }
   });
 });
