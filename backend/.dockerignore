@@ -1,0 +1,9 @@
+node_modules
+dist
+.env
+.env.*
+*.log
+*.zip
+*.bak
+tmp-*.mts
+.staging-database-url

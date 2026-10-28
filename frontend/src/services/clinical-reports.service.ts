@@ -84,11 +84,9 @@ export const clinicalReportsService = {
   delete: async (reportIds: string[]): Promise<{ success: boolean; data?: { deletedCount: number }; message?: string }> =>
     apiRequest('/clinical-reports/bulk', 'DELETE', { reportIds }),
 
-  downloadPdf: (id: string) => {
-    downloadFile(`/clinical-reports/${id}/pdf`, `clinical-report-${id}.pdf`);
-  },
+  downloadPdf: (id: string) =>
+    downloadFile(`/clinical-reports/${id}/pdf`, `clinical-report-${id}.pdf`),
 
-  downloadDocx: (id: string) => {
-    downloadFile(`/clinical-reports/${id}/docx`, `clinical-report-${id}.docx`);
-  },
+  downloadDocx: (id: string) =>
+    downloadFile(`/clinical-reports/${id}/docx`, `clinical-report-${id}.docx`),
 };

@@ -7,7 +7,8 @@
 - **Concurrency safety**: Uses `INSERT ... ON CONFLICT (company_id, year) DO UPDATE SET last_number = last_number + 1 RETURNING last_number`, wrapped in a transaction.
 - **`report_number` column** on `clinical_reports`: unique and nullable. Legacy records without a report number fall back to the UUID prefix for display.
 - **Display surfaces**: list table, view modal, PDF, and DOCX exports.
-- **Tests**: `clinical-reports.service.test.ts` covers first/second report, company isolation, year reset, multiple trainees, and concurrent allocation uniqueness.
+- **PDF logo asset**: `backend/assets/ilkkmlogo.png` is bundled with the backend and resolved via `__dirname` (`<backend>/assets/…`), so it works in dev (`src/`) and the standalone Docker image (`dist/`). `resolveLogoPath()` throws a controlled `AppError(500, code PDF_ASSET_MISSING)` — with the searched paths logged internally — rather than leaking a raw exception. Frontend "Application updated" screen must only react to genuine chunk-load errors (`index.html` regex in `unhandledrejection`); download service promises are returned so callers handle failures.
+- **Tests**: `clinical-reports.service.test.ts` covers first/second report, company isolation, year reset, multiple trainees, and concurrent allocation uniqueness. `clinical-reports.pdf.test.ts` covers logo asset resolution, embedded-image PDF output, and the controlled missing-asset error. Frontend `clinical-reports.service.test.ts` covers download-failure propagation and the chunk-load screen regex.
 
 ## Verification Commands
 

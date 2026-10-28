@@ -3,6 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import PDFDocument from "pdfkit-table";
 
+import { AppError } from "../../utils/app-error.js";
 import type { ClinicalReportDetail } from "./clinical-reports.service.js";
 import { CLINICAL_REPORT_LAYOUT } from "./clinical-reports.layout.js";
 
@@ -54,8 +55,13 @@ const translations = {
   },
 };
 
-function resolveLogoPath(): string {
+export function resolveLogoPath(): string {
   const candidates = [
+    // Bundled with the backend. Resolves to <backend>/assets/ilkkmlogo.png from
+    // both src/modules/clinical-reports (dev) and dist/modules/clinical-reports
+    // (production), so it works inside the standalone Railway container.
+    path.resolve(__dirname, "../../../assets/ilkkmlogo.png"),
+    // Monorepo fallbacks for a backend running beside the frontend app.
     path.resolve(__dirname, "../../../../frontend/dist/images/ilkkmlogo.png"),
     path.resolve(__dirname, "../../../../frontend/public/images/ilkkmlogo.png"),
     path.resolve(process.cwd(), "../frontend/dist/images/ilkkmlogo.png"),
@@ -70,7 +76,15 @@ function resolveLogoPath(): string {
     }
   }
 
-  throw new Error("ILKKM logo not found");
+  console.error(
+    "[clinical-reports] ILKKM logo asset is missing. Searched paths:",
+    candidates
+  );
+  throw new AppError(
+    500,
+    "Clinical report PDF generation is temporarily unavailable",
+    "PDF_ASSET_MISSING"
+  );
 }
 
 function formatDateTime(value: Date | string, locale: string): string {

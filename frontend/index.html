@@ -116,7 +116,10 @@
 
         window.addEventListener('unhandledrejection', function (event) {
           var reason = event.reason ? String(event.reason) : '';
-          if (/load|chunk|module|import/i.test(reason)) {
+          // Only genuine code-loading failures mean a new deploy has landed.
+          // Ordinary request failures (e.g. a failed PDF download) must not
+          // trigger this screen.
+          if (/ChunkLoadError|Loading chunk|dynamically imported module|module script failed|vite:preloadError/i.test(reason)) {
             console.warn('[App] Chunk load error:', reason);
             showUpdateError();
           }
